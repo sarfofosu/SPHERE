@@ -1,213 +1,132 @@
+# ============================================================================
+# SPHERE: Spatial Variable Gene Detection in Human Breast Cancer
+# ============================================================================
+# This script demonstrates a complete SPHERE analysis workflow using
+# human breast cancer spatial transcriptomics data. It covers:
+#   1. Loading and preparing the expression data
+#   2. Handling missing pathway annotations
+#   3. Filtering pathways by size
+#   4. Fitting the SPHERE model
+#   5. Inspecting results
+# ============================================================================
 
-## data include(original data, spot, entrezID, pathway matrix, path df & modified data genes with at least 1 pathway)
 
-load("humanBC_dataset.RData") ## Human breast cancer
-load("BrC_New_set.RData") ## Human breast cancer trimed data 
+# ----------------------------------------
+# 0. Load required packages
+# ----------------------------------------
+
+library(SPHERE)
+library(cmdstanr)
+library(posterior)
 
 
-## Data for analysis
+# ----------------------------------------
+# 1. Load data
+# ----------------------------------------
 
+# Full human breast cancer spatial transcriptomics dataset
+load("humanBC_dataset.RData")
+# Pre-processed subset with selected genes and spots
+load("BrC_New_set.RData")
+
+
+# ----------------------------------------
+# 2. Prepare expression data and spatial coordinates
+# ----------------------------------------
+
+# Expression count matrix (spots x genes)
+# round() ensures integer counts for the Poisson likelihood
 data_mat <- round(BrC_final)
-gen_path <- BrC_path_sin
-spot     <- BrC_spot
+# Spatial coordinates for each spot (x, y)
+spot <- BrC_spot
+# Quick sanity check
+cat("Spots:", nrow(data_mat), "\n")
+cat("Genes:", ncol(data_mat), "\n")
 
 
-pathway_df <- pathway_df
-na_idx <- which(is.na(pathway_df$Pathway))       # Identify genes with missing pathway annotations
 
-# If missing pathways exist, assign them into 3 artificial groups (p1, p2, p3)
-if (length(na_idx) > 0) {     
-  groups <- split(            # This prevents loss of genes and allows them to be included in CAR structure
-    na_idx,  cut(seq_along(na_idx), 3, labels = c("p1","p2","p3"))
-  )
-  
-  # Replace NA pathway labels with artificial group labels
-  for (g in names(groups)) {
-    pathway_df$Pathway[groups[[g]]] <- g
-  }
+# ----------------------------------------
+# 3. Prepare pathway annotations
+# ----------------------------------------
+
+# pathway_df is loaded from the .RData file and must contain a column
+# named "Pathway" with one entry per gene (same order as columns of data_mat)
+
+# 3a. Handle genes with missing pathway annotations
+#     In the Stan CAR prior, a gene with no neighbors (n_j = 0) receives
+#     an independent Normal(0, 10) prior on Beta[j], so these genes are
+#     effectively treated as isolated.
+na_idx <- which(is.na(pathway_df$Pathway))
+
+if (length(na_idx) > 0) {
+  # Give each unannotated gene a unique pathway label: "isolated_1", "isolated_2", ...
+  pathway_df$Pathway[na_idx] <- paste0("isolated_", seq_along(na_idx))
+  cat("Assigned", length(na_idx),
+      "unannotated genes to individual singleton pathways.\n")
 }
-# Filter pathways based on size/criteria (user-defined helper function)
+# 3b. Filter pathways by size 
 gen_path <- filter_pathways_by_limit(pathway_df)
+# Final gene-level pathway vector (length = number of genes)
+gene_pathway_final <- gen_path$Pathway
+cat("Pathways retained:", length(unique(gene_pathway_final)), "\n")
+
+
+# ----------------------------------------
+# 4. Specify Stan model path
+# ----------------------------------------
+
+# Point to the compiled Stan file shipped with the package (or a local copy)
+stan_model_path <- system.file("stan", "SPHERE_stan.stan", package = "SPHERE")
+
+# If running from a local file instead, uncomment the line below:
+# stan_model_path <- "SPHERE_stan.stan"
 
 
 
-## Extract the data dimensions
+# ----------------------------------------
+# 5. Fit the SPHERE model
+# ----------------------------------------
 
+BrC_fit <- fit_sphere(
+  data_mat       = data_mat,
+  spot           = spot,
+  gene_group     = gene_pathway_final,
+  stan_model_path = stan_model_path,
+  iter_sampling  = 5000,          # posterior draws per chain
+  iter_warmup    = 2000,          # warmup (burn-in) per chain
+  chains         = 3,             # number of independent chains
+  seed           = 8,             # for reproducibility
+  knots          = 30             # inducing points for low-rank GP
+)
 
+cat("Model fitting completed in", round(BrC_fit$runtime, 1), "seconds.\n")
 
+# ----------------------------------------
+# 6. Inspect results
+# ----------------------------------------
 
+# 6a. Check convergence diagnostics (Rhat should be < 1.05, ESS > 400)
+summary_df <- BrC_fit$summary
+cat("\nParameters with Rhat > 1.05:\n")
+print(summary_df[summary_df$rhat > 1.05, ])
 
-fit_sphere <- function(data_mat, spot, pathway_df, stan_model_path, 
-                       iter_sampling = 5000, iter_warmup = 2000,
-                       chains = 3, seed = 8) {
-  
-    # ----------------------------
-    # 1. Data preprocessing
-    # ----------------------------
-    data_mat <- round(as.matrix(data_mat))           # Ensure input data is a numeric matrix of counts (Poisson requires integers)
-    na_idx <- which(is.na(pathway_df$Pathway))       # Identify genes with missing pathway annotations
+# 6b. Extract posterior classification of spatially expressed genes
+#     Z[j] = 1 means gene j is non-spatially expressed
+#     Z[j] = 2 means gene j is spatially expressed
+z_rows <- grep("^Z\\[", summary_df$variable)
+z_summary <- summary_df[z_rows, ]
 
-    # If missing pathways exist, assign them into 3 artificial groups (p1, p2, p3)
-    if (length(na_idx) > 0) {     
-      groups <- split(            # This prevents loss of genes and allows them to be included in CAR structure
-        na_idx,
-        cut(seq_along(na_idx), 3, labels = c("p1","p2","p3"))
-      )
-      
-      # Replace NA pathway labels with artificial group labels
-      for (g in names(groups)) {
-        pathway_df$Pathway[groups[[g]]] <- g
-      }
-    }
-    
-    # Filter pathways based on size/criteria (user-defined helper function)
-    gen_path <- filter_pathways_by_limit(pathway_df)
-    
-    # ----------------------------
-    # 2. Extract dimensions
-    # ----------------------------
-    n <- nrow(data_mat)                               # n = number of spatial locations (spots)
-    p <- ncol(data_mat)                               # p = number of genes
-    G <- length(unique(gen_path$Pathway))             # G = number of unique biological pathways
-    gene_grp <- as.integer(factor(gen_path$Pathway))  # Convert pathway labels into integer indices for Stan
-    
-    # ----------------------------
-    # 3. Construct model inputs
-    # ----------------------------
-    
-    # Compute normalization factor E_ij:
-    # total counts per spot replicated across genes
-    # (acts like exposure/offset in Poisson model)
-    E_ij <- matrix(rep(apply(data_mat, 1, sum), p), n, p)
-    
-    # Compute squared Euclidean distance matrix between spatial locations
-    # Used in Gaussian process covariance
-    dist_sq <- as.matrix(dist(spot))^2
-    
-    # ----------------------------
-    # 4. Low-rank GP basis construction (NEW)
-    # ----------------------------
-    
-    # Construct distance matrix from spots to RBF knots
-    # D[i,b] = squared distance from spot i to knot b
-    D <- make_rbf_dist(spot, r = 30)
-    
-    # Number of basis functions (knots)
-    r <- ncol(D)
-    
-    # Median distance (can be useful for diagnostics / scaling)
-    med_D <- median(D)
-    
-    # Construct RBF basis matrix
-    # Phi[i,b] = basis function linking spot i to knot b
-    Phi <- make_rbf_basis(spot, r = 30, lengthscale = NULL)
-    
-    # Ensure consistency
-    r <- ncol(Phi)
-    
-    
-    
-    
-    # Assemble data list to pass into Stan model
-    stan_data <- list(
-      P = p,                                            # number of genes
-      N = n,                                            # number of spatial locations
-      Y = data_mat,                                     # observed count data
-      dist_sq = dist_sq,                                # spatial distance matrix
-      alpha = c(10, 3),                                 # Dirichlet prior for mixture weights
-      N_i = as.vector(N_i),                                     # normalization/exposure term
-      
-      # Hyperparameters for priors
-      a_err = 0, b_err = 1,                             # half-normal prior for noise sd
-      a_gsl = 0, b_gsl = 3,                             # lognormal prior for GP length-scale
-      a_gs  = 0, b_gs  = 12,                            # half-normal prior for GP variance
-      a_rho = 2, b_rho = 2,                             # beta prior for CAR correlation
-      a_tau_beta = 1, b_tau_beta = 1,                   # gamma prior for CAR precision
-      
-      # Pathway structure
-      G = G,                                            # number of pathways
-      gene_group = gene_grp,                             # pathway membership per gene
-      
-      # Low-rank GP inputs
-      r = r,
-      D = D,
-      Phi = Phi
-    )
-    
-    # ----------------------------
-    # 4. Initial values for MCMC
-    # ----------------------------
-    init_fun <- function() {
-      list(
-        sig_eta_gs = rep(10, p),                        # Gene-specific GP variance parameters
-        ell_gs = rep(2, p),                             # Gene-specific length-scale parameters
-        pii = replicate(                                # Mixture probabilities (Dirichlet initialized)
-          p, as.numeric(gtools::rdirichlet(1, c(8, 2))), simplify = FALSE),
-        sigma_sd = rep(1, p),                           # Observation noise standard deviation
-        Beta = rep(1, p),                               # CAR regression coefficients
-        rho = runif(1, 0.1, 1),                         # Spatial correlation parameter
-        sigma_beta = runif(1, 0.1, 1),                  # CAR precision parameter
-        mu0 = 1,                                        # Global intercept
-        loglambda = matrix(0.5, n, p),                  # Log-intensity (Poisson mean parameter)
-        w = matrix(rnorm(r * p), r, p),                 # NEW: GP weights (r x p matrix)
-      )
-    }
-    
-    # ----------------------------
-    # 5. Compile and fit model
-    # ----------------------------
-    
-    # Compile Stan model from file
-    model <- cmdstanr::cmdstan_model(stan_model_path)
-    
-    # Start timing model fitting
-    t_start <- proc.time()[3]
-    
-    # Run MCMC sampling
-    fit <- model$sample(
-      data = stan_data,                                # input data
-      chains = chains,                                 # number of chains
-      parallel_chains = chains,                        # parallel execution
-      iter_warmup = iter_warmup,                       # burn-in iterations
-      iter_sampling = iter_sampling,                   # posterior samples
-      seed = seed,                                     # reproducibility
-      init = init_fun,                                 # initialization function
-      refresh = 100                                    # print progress every 100 iterations
-    )
-    
-    # Compute total runtime
-    runtime <- proc.time()[3] - t_start
-    
-    # ----------------------------
-    # 6. Posterior summaries
-    # ----------------------------
-    
-    # Extract summary statistics for key model parameters
-    summary <- fit$summary(
-      variables = c("pii", "Z", "rho", "sig_eta_gs", "Beta", "mu0","sigma_beta", "ell_gs"),
-      posterior::default_summary_measures()[1:3],
-      quantiles = ~ quantile2(., probs = c(0.025, 0.975)),
-      posterior::default_convergence_measures()
-    )    
-    
-    
-    ##-----------------------------------------------
-    ## Extract posterior draws
-    ##-----------------------------------------------
-    
-    draws_array <- fit$draws()
-    
-    # ----------------------------
-    # 8. Return results
-    # ----------------------------
-    
-    return(list(
-      fit = fit,                                     # full CmdStan object
-      summary = summary,                             # posterior summaries
-      draws = draws_array,                           # selected posterior samples
-      stan_data = stan_data,                         # stan data 
-      runtime = runtime))                            # computation time    
-}
+# Posterior mean of Z: values close to 2 indicate strong SVG evidence
+z_summary$gene <- colnames(data_mat)
+z_summary$prob_svg <- z_summary$mean - 1  # rescale to 0-1 probability
 
+# 6c. Identify top spatially expressed genes (posterior P(SVG) > 0.5)
+svg_genes <- z_summary[z_summary$prob_svg > 0.5, ]
+svg_genes <- svg_genes[order(-svg_genes$prob_svg), ]
 
+cat("\nTop spatially expressed genes (P(SEG) > 0.5):\n")
+print(head(svg_genes[, c("gene", "prob_svg")], 10))
 
+# 6d. Save results
+save(BrC_fit, z_summary, svg_genes, file = "SPHERE_BrC_results.RData")
+cat("\nResults saved to SPHERE_BrC_results.RData\n")
