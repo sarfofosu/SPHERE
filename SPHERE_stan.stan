@@ -1,36 +1,56 @@
-// ================================================================
-//  STAN model for SPHERE
-// ================================================================
+// ==================================================================================
+// SPHERE: A Spatial Poisson Hierarchical modEl with pathway-infoRmed gEne networks
+// ==================================================================================
+// This Stan model identifies spatially expressed genes (SVGs) in spatial
+// transcriptomics data. It uses:
+//   1. A Poisson log-normal observation model for count data
+//   2. A low-rank Gaussian Process (GP) to capture spatial patterns
+//   3. A gene-level two-component mixture to classify genes as
+//      spatially expressed (SE) or non-spatially expressed (non-SE)
+//   4. A Conditional Autoregressive (CAR) prior that shares information
+//      across genes belonging to the same biological pathway
+// =============================================================================
 
 
 
 // ---------------------------------------------------------------
-// DATA
+// DATA BLOCK
+// ---------------------------------------------------------------
+// Everything here is fixed and supplied by the user from R.
+// Stan reads these values once before sampling begins.
 // ---------------------------------------------------------------
 data {
-  // Data Setup
+  // === Core Dimensions ===
   int<lower=1> N;                              // number of spots
   int<lower=1> P;                              // number of genes
-  array[N,P] int<lower=0> Y;                  // gene expression counts
-  vector<lower=0>[N] N_i;                      // Normalization offsets
+  array[N,P] int<lower=0> Y;                   // Gene expression count matrix (spots x genes)
+  vector<lower=0>[N] N_i;                      // Normalization offsets : Accounts for differences in sequencing depth across spots
 
-  // RBF Low-rank GP basis
-  int<lower=1> r;                              // number of knots / basis functions
-  matrix[N,r] D;                               // squared distances ||s_i - k_b||^2  (N x r)
-  matrix[N,r] Phi;                             // distances from spots to knots
+  // === Low-Rank GP Basis Function Inputs ===
+  // Instead of computing a full N x N covariance matrix (expensive),
+  // we approximate the GP using r << N inducing knots.
+  
+  int<lower=1> r;                              // Number of knots (inducing points) for the low-rank GP, r << N
+  matrix[N,r] D;                               // Squared Euclidean distances from each spot to each knot
+  matrix[N,r] Phi;                             // Basis function matrix (N spots x r knots)  Phi[i,b] = basis function value linking spot i to knot b
 
-  // Hyperparameters for Priors
-  real<lower=0> a_err;  real<lower=0> b_err;    // sigma_sd
-  vector<lower=0>[2] alpha;                     // Dirichlet for pi_j
-  real<lower=0> a_gs;   real<lower=0> b_gs;     // sig_eta_gs
-  real<lower=0> a_gsl;  real<lower=0> b_gsl;    // ell_gs
-  real<lower=0> a_mu;  real<lower=0> b_mu;      // mu0
+  // === Hyperparameters for Prior Distributions ===
+  // These are fixed constants that control the shape of the priors.
+  
+  real<lower=0> a_err;  real<lower=0> b_err;    // Location (mean) and Scale (sd) for the half-normal prior on sigma_sd[j]
+  vector<lower=0>[2] alpha;                     // Dirichlet concentration parameters (length 2) alpha = (alpha_1, alpha_2) and Controls the prior on mixture weights pii[j]
+  real<lower=0> a_gs;   real<lower=0> b_gs;     // Location (mean) and Scale (sd) for the half-normal prior on sig_eta_gs[j]
+  real<lower=0> a_gsl;  real<lower=0> b_gsl;    // Mean and sd parameter for log-normal prior on ell_gs[j] (GP lengthscale)
+  real<lower=0> a_mu;  real<lower=0> b_mu;      // Mean and sd for the normal prior on mu0 (global intercept)
 
-  // Pathway / CAR grouping
-  int<lower=1> G;
-  array[P] int<lower=1, upper=G> gene_group;
-  real<lower=0> a_tau_beta; real<lower=0> b_tau_beta;
-  real<lower=0> a_rho;      real<lower=0> b_rho;
+  // === Pathway / CAR Grouping ===
+  // Genes are organized into G biological pathway groups.
+  // Genes in the same group are treated as "neighbors" in the CAR prior,
+  // allowing them to share information about expression effects.
+  int<lower=1> G;                                            // Number of distinct gene groups (pathways) 
+  array[P] int<lower=1, upper=G> gene_group;                 // Pathway membership for each gene; gene_group[j] = which group gene j belongs to
+  real<lower=0> a_tau_beta; real<lower=0> b_tau_beta;        // Location and scale for half-normal prior on sigma_beta (CAR precision)
+  real<lower=0> a_rho;      real<lower=0> b_rho;             // shapes parameter for Beta prior; rho controls strength of genes in the CAR
 }
 
 
@@ -141,18 +161,22 @@ model {
 
 
 // ---------------------------------------------------------------
-// POSTERIOR CLASSIFICATION
+// GENERATED QUANTITIES BLOCK - POSTERIOR CLASSIFICATION
+// ---------------------------------------------------------------
+// Computed AFTER each HMC draw, using the sampled parameter values.
+// These are derived quantities for posterior inference 
 // ---------------------------------------------------------------
 generated quantities {
-  array[P] int<lower=1, upper=2> Z;
+  array[P] int<lower=1, upper=2> Z;                      // Posterior gene-level classification indicator: Z[j] = 1 NON-SE ; Z[j] = 2 -> SE
   for (j in 1:P) {
-    vector[2] lpp = rep_vector(0,2);
+    vector[2] lpp = rep_vector(0,2);                     // Initialize log-posterior-predictive scores for each component
     for (i in 1:N) {
       lpp[1] += normal_lpdf(loglambda[i,j] | mu0 + Beta[j], sigma_sd[j]);
       lpp[2] += normal_lpdf(loglambda[i,j] | mu0 + Beta[j] +  eta[i,j], sigma_sd[j]);
     }
     lpp += log(pii[j]);
-    Z[j] = categorical_logit_rng(lpp);
+    Z[j] = categorical_logit_rng(lpp);      // Over many HMC samples, the fraction of times Z[j] = 2
+                                            // gives the posterior probability that gene j is an SVG.
   }
 }
 
