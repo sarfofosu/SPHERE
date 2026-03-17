@@ -11,7 +11,7 @@ data {
   // Data Setup
   int<lower=1> N;                              // number of spots
   int<lower=1> P;                              // number of genes
-  array[N,P] int<lower=0> Y;                   // gene expression counts
+  array[N,P] int<lower=0> Y;                  // gene expression counts
   vector<lower=0>[N] N_i;                      // Normalization offsets
 
   // RBF Low-rank GP basis
