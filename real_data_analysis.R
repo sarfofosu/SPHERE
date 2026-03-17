@@ -1,46 +1,29 @@
-#' Fit the SPHERE Model for Spatial Transcriptomics Data
-#'
-#' This function fits the SPHERE (A Spatial Poisson Hierarchical modEl with pathway-infoRmed gEne networks) 
-#' using a Bayesian framework implemented in Stan.
-#'
-#' @param data_mat A numeric matrix (n x p) of gene expression counts,
-#'   where n is the number of spatial locations (spots) and p is the number of genes.
-#' @param spot A numeric matrix (n x d) of spatial coordinates for each spot.
-#' @param pathway_df A data frame containing gene-to-pathway mappings.
-#'   Must include a column named `Pathway`.
-#' @param stan_model_path Path to the Stan model file.
-#' @param iter_sampling Number of post-warmup iterations (default: 2000).
-#' @param iter_warmup Number of warmup iterations (default: 1000).
-#' @param chains Number of MCMC chains (default: 1).
-#' @param seed Random seed for reproducibility (default: 8).
-#'
-#' @return A list containing:
-#' \describe{
-#'   \item{fit}{CmdStanMCMC object}
-#'   \item{summary}{Posterior summary statistics}
-#'   \item{runtime}{Elapsed time (seconds)}
-#'   \item{draws}{Posterior draws (selected parameters)}
-#' }
-#'
-#' @details
-#' The model:
-#' \itemize{
-#'   \item Uses a Poisson likelihood for count data
-#'   \item Incorporates spatial dependence via Gaussian processes
-#'   \item Models gene relationships using pathway-informed CAR priors
-#' }
-#'
-#' @examples
-#' \dontrun{
-#' result <- fit_sphere(
-#'   data_mat = counts,
-#'   spot = coordinates,
-#'   pathway_df = pathway_data,
-#'   stan_model_path = "model_w_fullCAR.stan"
-#' )
-#' }
-#'
-#' @export
+
+na_idx <- which(is.na(pathway_df$Pathway))       # Identify genes with missing pathway annotations
+
+# If missing pathways exist, assign them into 3 artificial groups (p1, p2, p3)
+if (length(na_idx) > 0) {     
+  groups <- split(            # This prevents loss of genes and allows them to be included in CAR structure
+    na_idx,
+    cut(seq_along(na_idx), 3, labels = c("p1","p2","p3"))
+  )
+  
+  # Replace NA pathway labels with artificial group labels
+  for (g in names(groups)) {
+    pathway_df$Pathway[groups[[g]]] <- g
+  }
+}
+
+
+
+
+
+# Filter pathways based on size/criteria (user-defined helper function)
+gen_path <- filter_pathways_by_limit(pathway_df)
+
+
+
+
 fit_sphere <- function(data_mat, spot, pathway_df, stan_model_path, 
                        iter_sampling = 5000, iter_warmup = 2000,
                        chains = 3, seed = 8) {

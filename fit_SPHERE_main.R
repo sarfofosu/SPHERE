@@ -43,74 +43,48 @@
 #' @export
 fit_sphere <- function(data_mat, spot, pathway_df, stan_model_path, 
                        iter_sampling = 5000, iter_warmup = 2000,
-                       chains = 3, seed = 8) {
+                       chains = 3, gene_group, seed = 8, knots = 30) {
   
   # ----------------------------
-  # 1. Data preprocessing
+  # 1. Data
   # ----------------------------
   data_mat <- round(as.matrix(data_mat))           # Ensure input data is a numeric matrix of counts (Poisson requires integers)
-  na_idx <- which(is.na(pathway_df$Pathway))       # Identify genes with missing pathway annotations
-  
-  # If missing pathways exist, assign them into 3 artificial groups (p1, p2, p3)
-  if (length(na_idx) > 0) {     
-    groups <- split(            # This prevents loss of genes and allows them to be included in CAR structure
-      na_idx,
-      cut(seq_along(na_idx), 3, labels = c("p1","p2","p3"))
-    )
-    
-    # Replace NA pathway labels with artificial group labels
-    for (g in names(groups)) {
-      pathway_df$Pathway[groups[[g]]] <- g
-    }
-  }
-  
-  # Filter pathways based on size/criteria (user-defined helper function)
-  gen_path <- filter_pathways_by_limit(pathway_df)
-  
+
   # ----------------------------
   # 2. Extract dimensions
   # ----------------------------
   n <- nrow(data_mat)                               # n = number of spatial locations (spots)
   p <- ncol(data_mat)                               # p = number of genes
-  G <- length(unique(gen_path$Pathway))             # G = number of unique biological pathways
-  gene_grp <- as.integer(factor(gen_path$Pathway))  # Convert pathway labels into integer indices for Stan
+  G <- length(unique(gene_group))                   # G = number of unique biological pathways
+  gene_grp <- as.integer(factor(gene_group))        # Convert pathway labels into integer indices for Stan
+  
+  if (length(gene_grp) != p) {
+    stop("gene_group must have length equal to number of genes (columns of data_mat).")
+  }
+  
+  if (max(gene_grp) > G) {
+    stop("gene_group contains values larger than G.")
+  }
   
   # ----------------------------
   # 3. Construct model inputs
   # ----------------------------
   
-  # Compute normalization factor E_ij:
-  # total counts per spot replicated across genes
-  # (acts like exposure/offset in Poisson model)
-  E_ij <- matrix(rep(apply(data_mat, 1, sum), p), n, p)
-  
+  # Compute normalization factor N_i: total counts per spot replicated across genes
+  N_i <- apply(data_mat, 1, sum)
   # Compute squared Euclidean distance matrix between spatial locations
-  # Used in Gaussian process covariance
   dist_sq <- as.matrix(dist(spot))^2
   
   # ----------------------------
-  # 4. Low-rank GP basis construction (NEW)
+  # 4. Low-rank GP basis construction
   # ----------------------------
   
   # Construct distance matrix from spots to RBF knots
-  # D[i,b] = squared distance from spot i to knot b
-  D <- make_rbf_dist(spot, r = 30)
-  
-  # Number of basis functions (knots)
-  r <- ncol(D)
-  
-  # Median distance (can be useful for diagnostics / scaling)
-  med_D <- median(D)
-  
+  D <- make_rbf_dist(spot, r = knots)           # D[i,b] = squared distance from spot i to knot b
+  med_D <- median(D)                            # Median distance (can be useful for diagnostics / scaling)
   # Construct RBF basis matrix
-  # Phi[i,b] = basis function linking spot i to knot b
-  Phi <- make_rbf_basis(spot, r = 30, lengthscale = NULL)
-  
-  # Ensure consistency
-  r <- ncol(Phi)
-  
-  
-  
+  Phi <- make_rbf_basis(spot, r = knots, lengthscale = NULL)   # Phi[i,b] = basis function linking spot i to knot b
+  r <- knots                                    # Number of basis functions (knots)
   
   # Assemble data list to pass into Stan model
   stan_data <- list(
@@ -119,7 +93,7 @@ fit_sphere <- function(data_mat, spot, pathway_df, stan_model_path,
     Y = data_mat,                                     # observed count data
     dist_sq = dist_sq,                                # spatial distance matrix
     alpha = c(10, 3),                                 # Dirichlet prior for mixture weights
-    N_i = as.vector(N_i),                                     # normalization/exposure term
+    N_i = as.vector(N_i),                             # normalization/exposure term
     
     # Hyperparameters for priors
     a_err = 0, b_err = 1,                             # half-normal prior for noise sd
@@ -130,7 +104,7 @@ fit_sphere <- function(data_mat, spot, pathway_df, stan_model_path,
     
     # Pathway structure
     G = G,                                            # number of pathways
-    gene_group = gene_grp,                             # pathway membership per gene
+    gene_group = gene_grp,                            # pathway membership per gene
     
     # Low-rank GP inputs
     r = r,
@@ -153,7 +127,7 @@ fit_sphere <- function(data_mat, spot, pathway_df, stan_model_path,
       sigma_beta = runif(1, 0.1, 1),                  # CAR precision parameter
       mu0 = 1,                                        # Global intercept
       loglambda = matrix(0.5, n, p),                  # Log-intensity (Poisson mean parameter)
-      w = matrix(rnorm(r * p), r, p),                 # NEW: GP weights (r x p matrix)
+      w = matrix(rnorm(r * p), r, p),                 # GP weights (r x p matrix)
     )
   }
   
