@@ -88,6 +88,7 @@ stan_model_path <- "SPHERE_stan.stan"
 # 5. Fit the SPHERE model
 # ----------------------------------------
 
+#NB Runing this may take hours to complete
 BrC_fit <- fit_sphere(
   data_mat       = data_mat,
   spot           = spot,
@@ -106,7 +107,7 @@ cat("Model fitting completed in", round(BrC_fit$runtime, 1), "seconds.\n")
 # 6. Inspect results
 # ----------------------------------------
 
-# 6a. Check convergence diagnostics (Rhat should be < 1.05, ESS > 400)
+# 6a. Check convergence diagnostics (Rhat should be < 1.05)
 summary_df <- BrC_fit$summary
 cat("\nParameters with Rhat > 1.05:\n")
 print(summary_df[summary_df$rhat > 1.05, ])
