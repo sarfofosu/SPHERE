@@ -181,25 +181,36 @@ fit_sphere <- function(data_mat, spot, gene_group, stan_model_path, chains = 3,
     Phi = Phi
   )
   
+ 
   # ------------------------------------------------------------------
-  # 6. Initial values for MCMC
+  # 6. Initial values for MCMC (data-driven, robust to zeros)
   # ------------------------------------------------------------------
+  
+  # Compute safe log-rates from the data to initialize loglambda.
+  # Replace zeros with 0.5 before taking log to avoid -Inf, then
+  # subtract log(N_i) to get the rate on the correct scale.
+  Y_safe      <- pmax(data_mat, 0.5)
+  log_rates   <- log(Y_safe) - log(N_i)           # n x p matrix
+  mu0_init    <- median(log_rates)                 # robust central value
+  resid_init  <- log_rates - mu0_init              # gene-level deviations
+  beta_init   <- colMeans(resid_init)              # per-gene mean residual
+  ll_init     <- sweep(log_rates, 2, beta_init)    # loglambda ~ log_rate - beta
+  med_dist    <- median(sqrt(D))                   # typical spot-knot distance
   
   init_fun <- function() {
     list(
-      mu0 = 1,                                        # Global intercept
-      pii = replicate(                                # Mixture probabilities (Dirichlet initialized)
-        p, as.numeric(gtools::rdirichlet(1, c(8, 2))), simplify = FALSE),
-      loglambda = matrix(0.5, n, p),                  # Log-intensity (Poisson mean parameter)
-      sigma_sd = rep(1, p),                           # Observation noise standard deviation
-      sig_eta_gs = rep(10, p),                        # Gene-specific GP variance parameters
-      ell_gs = rep(2, p),                             # Gene-specific length-scale parameters
-      w = matrix(rnorm(r * p), r, p),                 # GP weights (r x p matrix)
-      Beta = rep(1, p),                               # CAR regression coefficients
-      rho = runif(1, 0.1, 1),                         # Spatial correlation parameter
-      sigma_beta = runif(1, 0.1, 1)                   # CAR precision parameter
+      mu0        = mu0_init,
+      pii        = replicate(p,as.numeric(gtools::rdirichlet(1, c(8, 2))), simplify = FALSE),
+      loglambda  = ll_init,
+      sigma_sd   = pmax(apply(log_rates, 2, sd), 0.1),
+      sig_eta_gs = rep(0.3, p),
+      ell_gs     = rep(med_dist, p),
+      w          = matrix(rnorm(r * p, 0, 0.2), nrow = r, ncol = p),
+      Beta       = beta_init,
+      sigma_beta = 0.5,
+      rho = runif(1, 0.7, 0.95)
     )
-  }  
+  }
   
   # ------------------------------------------------------------------
   # 7. Compile and fit model
