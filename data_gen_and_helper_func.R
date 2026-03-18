@@ -379,21 +379,37 @@ gen_genedata_model <- function(
 
 pal <- colorRampPalette(c('#00274c', '#00274c',"lightyellow2",'#ffcb05','#ffcb05'))
 # Function to create a ggplot for each element in the list and arrange them in a grid
-plot_gene_data <- function(data, nrow = 1) {
-  plots <- lapply(names(data), function(gene_name) {
-    ggplot(data[[gene_name]], aes(x, y, color = expression)) +
-      geom_point(size = 4) +
-      scale_color_gradientn(colours = pal(5), limits = c(0, 1)) + 
-      theme_minimal() +
-      labs(title = paste("Relative expression Counts for \n", gene_name),
-           color = "Relative \nexpression") +
-      theme(axis.title = element_blank(),
-            axis.text = element_blank(),
-            axis.ticks = element_blank())
+plot_gene_data <- function(gene_df, spot, genes = NULL, nrow = 1) {
+  gene_df <- as.matrix(gene_df)
+  if (is.null(genes)) {
+    genes <- colnames(gene_df)
+  }
+  # 2. Relative expression (min-max per gene)
+  rel_expr <- apply(gene_df, 2, function(x) {
+    if (max(x) == min(x)) {
+      return(rep(0, length(x)))  # avoid division by zero
+    } else {
+      (x - min(x)) / (max(x) - min(x))
+    }
   })
-  
-  # Arrange all plots in a grid with the specified number of rows
-  do.call(grid.arrange, c(plots, nrow = nrow))
+  # Ensure matrix structure
+  rel_expr <- as.matrix(rel_expr)
+  # 3. Create plots
+  plots <- lapply(genes, function(gene_name) {
+    
+    df_plot <- data.frame(x = spot[,1], y = spot[,2], expression = rel_expr[, gene_name])
+    
+    ggplot(df_plot, aes(x, y, color = expression)) +
+      geom_point(size = 4) +  scale_color_gradientn(colours = pal(5), limits = c(0, 1)) +
+      theme_minimal() +  labs(
+        title = paste("Relative Expression for\n", gene_name),
+        color = "Relative\nExpression"
+      ) + theme(
+        axis.title = element_blank(), axis.text = element_blank(),  
+        axis.ticks = element_blank())
+  })
+  # 4. Arrange grid
+  do.call(gridExtra::grid.arrange, c(plots, nrow = nrow))
 }
 
 
@@ -480,3 +496,89 @@ relative_expr <- function(raw_exp) {
   raw_exp_log <- log1p(raw_exp) # log(1 + x)
   (raw_exp_log - min(raw_exp_log)) / (max(raw_exp_log) - min(raw_exp_log))
 }
+
+
+##---------------------------------------------------------
+## Create pathway effects
+##---------------------------------------------------------
+
+create_car_beta2 <- function(num_genes, gene_grp, rho = 0.9, tau_beta = 1) {
+  stopifnot(length(gene_grp) == num_genes)
+  
+  # adjacency: connect genes in same pathway
+  W <- matrix(0, num_genes, num_genes)
+  for (i in 1:(num_genes - 1)) {
+    for (j in (i + 1):num_genes) {
+      if (gene_grp[i] == gene_grp[j]) {
+        W[i, j] <- 1
+        W[j, i] <- 1
+      }
+    }
+  }
+  
+  deg <- rowSums(W)
+  D <- diag(deg)
+  
+  # Base CAR precision (before scaling)
+  Q0 <- D - rho * W
+  
+  # Handle isolated genes: iid Normal with precision tau_beta
+  iso <- which(deg == 0)
+  if (length(iso) > 0) Q0[iso, iso] <- 1
+  
+  # Symmetrize & scale
+  Q <- tau_beta * (Q0 + t(Q0))/2
+  
+  # Check PD
+  ev <- eigen(Q, symmetric = TRUE, only.values = TRUE)$values
+  if (min(ev) <= 0) {
+    stop(sprintf("Q is not positive definite; min eigenvalue = %.3e. Reduce rho.", min(ev)))
+  }
+  
+  # Sample Beta ~ N(0, Q^{-1}) via Cholesky solve
+  R <- chol(Q)                        # upper triangular
+  z <- rnorm(num_genes)
+  Beta <- backsolve(R, z, transpose=TRUE)  # solves R' x = z
+  Beta <- backsolve(R, Beta)               # solves R  beta = x  => beta = Q^{-1/2} z
+  
+  Beta
+}
+
+
+##---------------------------------------------------------
+## Create gene-specific spatial variability
+##---------------------------------------------------------
+
+sim_gs_eta2 <- function(spots, num_genes, tau_gs, ell_gs, nugget = 1e-6) {
+  n <- nrow(spots)
+  if (length(tau_gs) != num_genes || length(ell_gs) != num_genes) {
+    stop("tau_gs and ell_gs must have length num_genes")
+  }
+  c_mat <- matrix(0, n, num_genes)
+  dist_sq <- as.matrix(dist(spots))^2
+  for (j in 1:num_genes) {
+    K_j <- tau_gs[j] * exp(-dist_sq / (2 * ell_gs[j]^2))
+    # add nugget for numerical stability
+    diag(K_j) <- diag(K_j) + nugget
+    # Cholesky sampling (more stable than mvrnorm)
+    R <- chol(K_j)
+    z <- rnorm(n)
+    c_mat[, j] <- t(R) %*% z
+  }
+  return(c_mat)
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
