@@ -107,16 +107,14 @@ cat("Model fitting completed in", round(BrC_fit$runtime, 1), "seconds.\n")
 # 6. Inspect results
 # ----------------------------------------
 
-# 6a. Check convergence diagnostics (Rhat should be < 1.05)
+# 6a. Print summary results
 summary_df <- BrC_fit$summary
-cat("\nParameters with Rhat > 1.05:\n")
-print(summary_df[summary_df$rhat > 1.05, ])
 
 # 6b. Extract posterior classification of genes
 #     Z[j] = 1 means gene j is non-se Z[j] = 2 means gene j is se
 z_rows <- grep("^Z\\[", summary_df$variable)
 z_summary <- summary_df[z_rows, ]
 
-# 6c. Save results
-save(BrC_fit, z_summary, file = "SPHERE_BrC_results.RData")
-cat("\nResults saved to SPHERE_BrC_results.RData\n")
+# # 6c. Save results
+# save(BrC_fit, z_summary, file = "SPHERE_BrC_results.RData")
+# cat("\nResults saved to SPHERE_BrC_results.RData\n")
