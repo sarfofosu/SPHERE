@@ -101,17 +101,17 @@ Where:
 
 ---
 
-## Main Functions
-
-| Function | Description |
-|---|---|
-| `fit_sphere()` | Fit the SPHERE model to spatial transcriptomics data |
-| `plot_gene_data()` | Visualize spatial expression patterns |
-| `filter_columns_by_sum()` | Filter low-count genes before model fitting |
-| `make_rbf_basis()` | Construct low-rank RBF Gaussian Process basis |
-| `make_rbf_dist()` | Compute knot distances for GP approximation |
-
----
+# ## Main Functions
+# 
+# | Function | Description |
+# |---|---|
+# | `fit_sphere()` | Fit the SPHERE model to spatial transcriptomics data |
+# | `plot_gene_data()` | Visualize spatial expression patterns |
+# | `filter_columns_by_sum()` | Filter low-count genes before model fitting |
+# | `make_rbf_basis()` | Construct low-rank RBF Gaussian Process basis |
+# | `make_rbf_dist()` | Compute knot distances for GP approximation |
+# 
+# ---
 
 ## Citation
 
