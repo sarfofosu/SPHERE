@@ -89,7 +89,6 @@ SPHERE models spatial transcriptomics count data using a hierarchical Bayesian f
      Y_{j}(s_i)  &\sim \text{Poisson}(N_{j}(s_i) \lambda_{j}(s_i))\\
      \log(\lambda_{j}(s_i)) &=\mu_0 + \delta_{ij} + \eta_{j}(s_i)\\
      \delta_{ij} &= \beta_j + \epsilon_{ij}, \qquad \boldsymbol{\epsilon}_i=(\epsilon_{i1},...,\epsilon_{ip}) \overset{\text{iid}}{\sim} \mathcal{N}\Big(0,\text{diag}\big( \sigma_1^2,...,\sigma_p^2)\Big)\\
-
 \end{align*}
 
 $\eta_{j}(s_{i}) \sim GP(0, k_{RBF})$   [low-rank approximation with r knots]
