@@ -1,7 +1,8 @@
 Package: SPHERE
 Title: Spatial Poisson Hierarchical modEl with pathway-infoRmed GEne Networks
 Version: 0.1.0
-Authors@R: person("Emmanuel", "Sarfo Fosu", email = "emmanuelsarfo45@yahoo.com", role = c("aut", "cre"))
+Authors: Emmanuel Sarfo Fosu, Joon J. Song, Thierry Chekouo
+Maintainer: Emmanuel Sarfo Fosu <emmanuelsarfo45@yahoo.com>
 Description: Implements SPHERE (Spatial Poisson Hierarchical modEl with 
     pathway-infoRmed gEne networks), a Bayesian spatial Poisson log-normal 
     model for identifying spatially expressed (SE) genes in spatial 
