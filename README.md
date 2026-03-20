@@ -1,7 +1,7 @@
 # SPHERE <img src="man/figures/logo.png" align="right" height="139" alt="" />
 
 <!-- badges: start -->
-[![R-CMD-check](https://github.com/yourusername/SPHERE/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/yourusername/SPHERE/actions/workflows/R-CMD-check.yaml)
+[![R-CMD-check](https://github.com/sarfofosu/SPHERE/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sarfofosu/SPHERE/actions/workflows/R-CMD-check.yaml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 <!-- badges: end -->
 
@@ -40,7 +40,7 @@ cmdstanr::install_cmdstan()
 install.packages("devtools")
 
 # Install SPHERE
-devtools::install_github("yourusername/SPHERE")
+devtools::install_github("sarfofosu/SPHERE")
 ```
 
 ### Step 3 — Load the package
@@ -130,5 +130,5 @@ This package is licensed under the [MIT License](LICENSE).
 
 ## Contact
 
-For questions or issues, please open a [GitHub Issue](https://github.com/yourusername/SPHERE/issues) 
+For questions or issues, please open a [GitHub Issue](https://github.com/sarfofosu/SPHERE/issues) 
 or contact Emmanuel Sarfo Fosu at emmanuelsarfo45@yahoo.com.
