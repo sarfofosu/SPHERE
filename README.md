@@ -1,7 +1,7 @@
 # SPHERE <img src="man/figures/logo.png" align="right" height="139" alt="" />
 
 <!-- badges: start -->
-[![R-CMD-check](https://github.com/sarfofosu/SPHERE/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sarfofosu/SPHERE/actions/workflows/R-CMD-check.yaml)
+<!-- [![R-CMD-check](https://github.com/sarfofosu/SPHERE/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sarfofosu/SPHERE/actions/workflows/R-CMD-check.yaml) -->
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 <!-- badges: end -->
 
@@ -10,9 +10,13 @@
 **SPHERE** (**S**patial **P**oisson **H**ierarchical mod**E**l with pathway-info**R**med g**E**ne networks) is an R package for identifying spatially expressed (SE) genes in spatial transcriptomics data.
 
 SPHERE combines:
+
 - A **Poisson log-normal likelihood** for modeling gene expression counts
+
 - A **low-rank Gaussian Process** to capture spatial dependence across tissue locations
+
 - A **pathway-informed Conditional Autoregressive (CAR) prior** to model biologically meaningful gene-gene dependencies
+
 - A **two-component mixture model** for classifying genes as spatially expressed or non-spatially expressed
 
 By jointly modeling spatial and gene-level dependencies informed by biological pathways, SPHERE improves both sensitivity and interpretability in detecting SE genes.
@@ -81,38 +85,28 @@ print(z_summary)
 SPHERE models spatial transcriptomics count data using a hierarchical Bayesian framework:
 
 
-Y_ij ~ Poisson(N_i * exp(lambda_ij))
+\begin{align*}
+     Y_{j}(s_i)  &\sim \text{Poisson}(N_{j}(s_i) \lambda_{j}(s_i))\\
+     \log(\lambda_{j}(s_i)) &=\mu_0 + \delta_{ij} + \eta_{j}(s_i)\\
+     \delta_{ij} &= \beta_j + \epsilon_{ij}, \qquad \boldsymbol{\epsilon}_i=(\epsilon_{i1},...,\epsilon_{ip}) \overset{\text{iid}}{\sim} \mathcal{N}\Big(0,\text{diag}\big( \sigma_1^2,...,\sigma_p^2)\Big)\\
 
-lambda_ij = mu_0 + beta_j + f_j(s_i)
+\end{align*}
 
-f_j(s_i) ~ GP(0, k_RBF)   [low-rank approximation with r knots]
+$\eta_{j}(s_{i}) \sim GP(0, k_{RBF})$   [low-rank approximation with r knots]
 
-beta_j ~ CAR(rho, tau)     [pathway-informed CAR prior]
+$\beta_j \sim CAR(\mu_{CAR}, \Sigma_{CAR})$     [pathway-informed CAR prior]
 
-$$Z_j \sim Mixture(pi_j)$$        [SE / non-SE classification]
+$Z_j \mid \pi_j \sim \text{Categorical}(\pi_{j,1},\pi_{j,2})$        [SE / non-SE classification]
 
 
 Where:
-- `Y_ij` is the count for gene `j` at spot `i`
-- `N_i` is the library size at spot `i`
-- `f_j` captures the spatial expression pattern for gene `j`
-- `beta_j` is the gene-level effect informed by pathway membership
-- `Z_j = 2` indicates gene `j` is spatially expressed
 
----
+- $Y_{ij}$ is the count for gene `j` at spot `i`
+- $N_{i}$ is the library size at spot `i`
+- $\eta_{j}(s_{i})$ captures the spatial expression pattern for gene `j`
+- $\beta_j$ is the gene-level effect informed by pathway membership
+- $Z_j = 2$ indicates gene `j` is spatially expressed
 
-## Citation
-
-A manuscript describing SPHERE is currently in preparation. Please check back soon for a citation link.
-
-> Sarfo Fosu, E. et al. (in preparation). SPHERE: Spatial Poisson Hierarchical modEl 
-> with pathway-infoRmed gEne networks for spatial transcriptomics.
-
----
-
-## License
-
-This package is licensed under the [MIT License](LICENSE).
 
 ---
 
