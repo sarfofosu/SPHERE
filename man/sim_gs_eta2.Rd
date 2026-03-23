@@ -2,7 +2,7 @@
 % Please edit documentation in R/data_gen_and_helper_func.R
 \name{sim_gs_eta2}
 \alias{sim_gs_eta2}
-\title{Simulate Gene-Specific Gaussian Process Spatial Effects}
+\title{Simulate Gene-Specific Gaussian Process Spatial Effects.}
 \usage{
 sim_gs_eta2(spots, num_genes, tau_gs, ell_gs, nugget = 1e-06)
 }
