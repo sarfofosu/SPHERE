@@ -29,28 +29,28 @@ data {
   // === Low-Rank GP Basis Function Inputs ===
   // Instead of computing a full N x N covariance matrix (expensive),
   // we approximate the GP using r << N inducing knots.
-  
+
   int<lower=1> r;                              // Number of knots (inducing points) for the low-rank GP, r << N
   matrix[N,r] D;                               // Squared Euclidean distances from each spot to each knot
   matrix[N,r] Phi;                             // Basis function matrix (N spots x r knots)  Phi[i,b] = basis function value linking spot i to knot b
 
   // === Hyperparameters for Prior Distributions ===
   // These are fixed constants that control the shape of the priors.
-  
-  real<lower=0> a_err;  real<lower=0> b_err;    // Location (mean) and Scale (sd) for the half-normal prior on sigma_sd[j]
-  vector<lower=0>[2] alpha;                     // Dirichlet concentration parameters (length 2) alpha = (alpha_1, alpha_2) and Controls the prior on mixture weights pii[j]
-  real<lower=0> a_gs;   real<lower=0> b_gs;     // Location (mean) and Scale (sd) for the half-normal prior on sig_eta_gs[j]
-  real<lower=0> a_gsl;  real<lower=0> b_gsl;    // Mean and sd parameter for log-normal prior on ell_gs[j] (GP lengthscale)
-  real<lower=0> a_mu;  real<lower=0> b_mu;      // Mean and sd for the normal prior on mu0 (global intercept)
+
+  real<lower=0> mu_noise; real<lower=0> sd_noise;                   // scale of half-normal prior on sigma_sd
+  vector<lower=0>[2] alpha;                                         // Dirichlet concentration parameters (length 2) alpha = (alpha_1, alpha_2) and Controls the prior on mixture weights pii[j]
+  real<lower=0> mu_gp_amplitude; real<lower=0> sd_gp_amplitude;     // mean and scale of half-normal prior on sig_eta_gs[j]
+  real<lower=0> mu_gp_lengthscale; real<lower=0> sd_gp_lengthscale; // mean and scale of log-normal prior on ell_gs
+  real mu_intercept; real<lower=0> sd_intercept;                    // scale of normal prior on mu0
 
   // === Pathway / CAR Grouping ===
   // Genes are organized into G biological pathway groups.
   // Genes in the same group are treated as "neighbors" in the CAR prior,
   // allowing them to share information about expression effects.
-  int<lower=1> G;                                            // Number of distinct gene groups (pathways) 
+  int<lower=1> G;                                            // Number of distinct gene groups (pathways)
   array[P] int<lower=1, upper=G> gene_group;                 // Pathway membership for each gene; gene_group[j] = which group gene j belongs to
-  real<lower=0> a_tau_beta; real<lower=0> b_tau_beta;        // Location and scale for half-normal prior on sigma_beta (CAR precision)
-  real<lower=0> a_rho;      real<lower=0> b_rho;             // shapes parameter for Beta prior; rho controls strength of genes in the CAR
+  real<lower=0> mu_car_precision; real<lower=0> sd_car_precision; // mean and scale of half-normal prior on sigma_beta
+  real<lower=0> shape_car_cor; real<lower=0> rate_car_cor;        // first and second shape of Beta prior on rho_CAR
 }
 
 
@@ -108,16 +108,16 @@ model {
   // ===========================================
   // These encode our prior beliefs about parameter values before seeing data.
 
-  target += normal_lpdf(mu0 | a_mu, b_mu);           // Prior on global intercept: mu0 ~ Normal(a_mu, b_mu)
-  for (j in 1:P) {                                   // Loop over all P genes
-    pii[j] ~ dirichlet(alpha);                       // Prior on mixture weights for gene j; pii[j] ~ Dirichlet(alpha[1], alpha[2]) and Controls the prior probability of being spatially variable
-    sigma_sd[j] ~ normal(a_err, b_err);              // Prior on observation noise for gene j; Larger b_err = more diffuse prior, allows more noise
-    sig_eta_gs[j] ~ normal(a_gs, b_gs);              // Prior on GP amplitude for gene j; Controls expected strength of spatial signal
-    ell_gs[j] ~ lognormal(a_gsl, b_gsl);             // Prior on GP lengthscale for gene j
-    w[, j] ~ normal(0, 1);                           // Prior on GP weights for gene j;  Standard normal prior on each of the r knot weights
+  target += normal_lpdf(mu0 | a_mu, b_mu);                        // Prior on global intercept: mu0 ~ Normal(a_mu, b_mu)
+  for (j in 1:P) {                                                // Loop over all P genes
+    pii[j] ~ dirichlet(alpha);                                    // Prior on mixture weights for gene j; pii[j] ~ Dirichlet(alpha[1], alpha[2]) and Controls the prior probability of being spatially variable
+    sigma_sd[j] ~ normal(mu_noise, sd_noise);                     // Prior on observation noise for gene j; Larger b_err = more diffuse prior, allows more noise
+    sig_eta_gs[j] ~ normal(mu_gp_amplitude, sd_gp_amplitude);     // Prior on GP amplitude for gene j; Controls expected strength of spatial signal
+    ell_gs[j] ~ lognormal(mu_gp_lengthscale, sd_gp_lengthscale);  // Prior on GP lengthscale for gene j
+    w[, j] ~ normal(0, 1);                                        // Prior on GP weights for gene j;  Standard normal prior on each of the r knot weights
   }
-  sigma_beta ~ normal(a_tau_beta, b_tau_beta);       // Prior on CAR conditional SD;  Controls how dispersed gene effects are within pathways
-  rho ~ beta(a_rho, b_rho);                          // Prior on CAR autocorrelation parameter; Larger a_rho pushes rho toward 1 (stronger spatial smoothing)
+  sigma_beta ~ normal(mu_car_precision, sd_car_precision);        // Prior on CAR conditional SD;  Controls how dispersed gene effects are within pathways
+  rho ~ beta(shape_car_cor, rate_car_cor);                        // Prior on CAR autocorrelation parameter; Larger a_rho pushes rho toward 1 (stronger spatial smoothing)
 
 
   // ================================================
@@ -126,7 +126,7 @@ model {
   // This implements a Conditional Autoregressive (CAR) prior on Beta[j].
   // Genes in the same pathway are "neighbors" and share information.
   // The full conditional for each gene is: Beta[j] | Beta[-j] ~ Normal(rho * mean(neighbors), sigma_beta / sqrt(n_j)), where n_j = number of neighbors of gene j.
-  {                     
+  {
     for (j in 1:P) {                                  // Loop over each gene
       real nj = 0;                                    // Counter: number of neighbors of gene j
       real sum_nb = 0;                                // Accumulator: sum of Beta values of gene j's neighbors
@@ -144,7 +144,7 @@ model {
         Beta[j] ~ normal(0, 10);                      // Isolated gene (no pathway neighbors) Given a weakly informative prior centered at 0
       }
     }
-  }                 
+  }
 
 
   // =============================================================
@@ -173,7 +173,7 @@ model {
 // GENERATED QUANTITIES BLOCK - POSTERIOR CLASSIFICATION
 // ---------------------------------------------------------------
 // Computed AFTER each HMC draw, using the sampled parameter values.
-// These are derived quantities for posterior inference 
+// These are derived quantities for posterior inference
 // ---------------------------------------------------------------
 generated quantities {
   array[P] int<lower=1, upper=2> Z;                      // Posterior gene-level classification indicator: Z[j] = 1 NON-SE ; Z[j] = 2 -> SE
