@@ -8,14 +8,24 @@ fit_sphere(
   data_mat,
   spot,
   gene_group,
-  stan_model_path = system.file("stan", "SPHERE_stan.stan", package = "SPHERE"),
-  chains = 3,
   iter_sampling = 2000,
   iter_warmup = 1000,
-  knots = 30,
+  stan_model_path = system.file("stan", "SPHERE_stan.stan", package = "SPHERE"),
+  chains = 3,
   seed = 8,
+  knots = 30,
   alpha = c(10, 3),
-  refresh = 100
+  refresh = 100,
+  mu_noise = 0,
+  sd_noise = 1,
+  mu_gp_lengthscale = 0,
+  sd_gp_lengthscale = 3,
+  mu_gp_amplitude = 0,
+  sd_gp_amplitude = 12,
+  shape_car_cor = 2,
+  rate_car_cor = 2,
+  mu_car_precision = 1,
+  sd_car_precision = 1
 )
 }
 \arguments{
@@ -29,21 +39,21 @@ each spot (typically \eqn{d = 2} for x-y coordinates).}
 \item{gene_group}{A character or factor vector of length \eqn{p} giving the
 pathway (group) membership for each gene.}
 
-\item{stan_model_path}{Character string. Path to the compiled Stan model
-file (\code{.stan}).}
-
-\item{chains}{Integer. Number of MCMC chains (default: 3).}
-
 \item{iter_sampling}{Integer. Number of post-warmup sampling iterations per
 chain (default: 2000).}
 
 \item{iter_warmup}{Integer. Number of warmup (burn-in) iterations per chain
 (default: 1000).}
 
-\item{knots}{Integer. Number of knots (inducing points) for the low-rank GP
-approximation (default: 30).}
+\item{stan_model_path}{Character string. Path to the compiled Stan model
+file (\code{.stan}). Defaults to the model bundled with the package.}
+
+\item{chains}{Integer. Number of MCMC chains (default: 3).}
 
 \item{seed}{Integer. Random seed for reproducibility (default: 8).}
+
+\item{knots}{Integer. Number of knots (inducing points) for the low-rank GP
+approximation (default: 30).}
 
 \item{alpha}{Numeric vector of length 2. Dirichlet concentration parameters
 for the mixture weights (default: \code{c(10, 3)}). The first element
@@ -51,11 +61,41 @@ corresponds to the non-spatially-variable component.}
 
 \item{refresh}{Integer. Print progress every \code{refresh} iterations
 (default: 100). Set to 0 to suppress output.}
+
+\item{mu_noise}{Numeric. Mean of the half-normal prior on observation noise
+standard deviation (default: 0).}
+
+\item{sd_noise}{Numeric. Scale of the half-normal prior on observation noise
+standard deviation (default: 1).}
+
+\item{mu_gp_lengthscale}{Numeric. Mean of the log-normal prior on the GP
+lengthscale (default: 0).}
+
+\item{sd_gp_lengthscale}{Numeric. Scale of the log-normal prior on the GP
+lengthscale (default: 3).}
+
+\item{mu_gp_amplitude}{Numeric. Mean of the half-normal prior on the GP
+signal amplitude (default: 0).}
+
+\item{sd_gp_amplitude}{Numeric. Scale of the half-normal prior on the GP
+signal amplitude (default: 12).}
+
+\item{shape_car_cor}{Numeric. First shape parameter of the Beta
+prior on the CAR spatial correlation \eqn{\rho} (default: 2).}
+
+\item{rate_car_cor}{Numeric. Second shape parameter of the Beta
+prior on the CAR spatial correlation \eqn{\rho} (default: 2).}
+
+\item{mu_car_precision}{Numeric. Mean of the half-normal prior on the CAR
+precision parameter \eqn{\tau_\beta} (default: 1).}
+
+\item{sd_car_precision}{Numeric. Scale of the half-normal prior on the CAR
+precision parameter \eqn{\tau_\beta} (default: 1).}
 }
 \value{
 A named list with the following elements:
 \describe{
-\item{fit}{The \code{\link[cmdstanr]{CmdStanMCMC}} object containing the
+\item{fit}{The \code{CmdStanMCMC} object containing the
 full posterior samples.}
 \item{summary}{A data frame of posterior summary statistics for key
 parameters (mean, median, sd, 95\\% credible intervals, convergence
@@ -70,7 +110,7 @@ reproducibility and diagnostics).}
 \description{
 Fits the SPHERE (Spatial Poisson Hierarchical modEl with pathway-infoRmed
 gEne networks) model using a Bayesian framework implemented in Stan. The
-model identifies spatially variable genes (SVGs) by combining a Poisson
+model identifies spatially expressed (SE) genes  by combining a Poisson
 log-normal likelihood, low-rank Gaussian Process spatial effects, and
 pathway-informed Conditional Autoregressive (CAR) priors.
 }
@@ -85,7 +125,7 @@ Gaussian Process captures spatial expression patterns using \code{knots}
 inducing points.
 \item \strong{Gene classification:} A two-component mixture model with a
 gene-level indicator \eqn{Z_j} classifies each gene as spatially
-variable (SE) or non-spatially variable (non-SE). Pathway information
+expressed (SE) or non-spatially expressed (non-SE). Pathway information
 is incorporated via a CAR prior on gene-level effects \eqn{\beta_j}.
 }
 
@@ -95,15 +135,18 @@ estimated as the fraction of posterior samples where \eqn{Z_j = 2}.
 \examples{
 \dontrun{
 result <- fit_sphere(
-  data_mat = counts_matrix,
-  spot = coord_matrix,
+  data_mat   = counts_matrix,
+  spot       = coord_matrix,
   gene_group = pathway_labels,
-  stan_model_path = system.file("stan", "SPHERE.stan", package = "SPHERE"),
-  knots = 50,
-  chains = 4
+  knots      = 50,
+  chains     = 4,
+  sd_gp_lengthscale  = 5,
+  sd_gp_amplitude    = 10,
+  shape_car_correlation = 2,
+  rate_car_correlation  = 2
 )
 
-# Posterior probability of each gene being spatially variable
+# Posterior probability of each gene being spatially expressed
 z_summary <- result$summary[grep("^Z\\\\[", result$summary$variable), ]
 }
 
