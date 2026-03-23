@@ -108,7 +108,7 @@ model {
   // ===========================================
   // These encode our prior beliefs about parameter values before seeing data.
 
-  target += normal_lpdf(mu0 | a_mu, b_mu);                        // Prior on global intercept: mu0 ~ Normal(a_mu, b_mu)
+  target += normal_lpdf(mu0 | mu_intercept, sd_intercept);        // Prior on global intercept: mu0 ~ Normal(a_mu, b_mu)
   for (j in 1:P) {                                                // Loop over all P genes
     pii[j] ~ dirichlet(alpha);                                    // Prior on mixture weights for gene j; pii[j] ~ Dirichlet(alpha[1], alpha[2]) and Controls the prior probability of being spatially variable
     sigma_sd[j] ~ normal(mu_noise, sd_noise);                     // Prior on observation noise for gene j; Larger b_err = more diffuse prior, allows more noise
