@@ -22,10 +22,12 @@ fit_sphere(
   sd_gp_lengthscale = 3,
   mu_gp_amplitude = 0,
   sd_gp_amplitude = 12,
-  shape_car_cor = 5,
-  rate_car_cor = 2,
-  mu_car_precision = 1,
-  sd_car_precision = 1
+  mu_intercept = 0,
+  sd_intercept = 1,
+  shape_beta_rho = 5,
+  rate_beta_rho = 2,
+  mu_beta_sig = 1,
+  sd_beta_sig = 1
 )
 }
 \arguments{
@@ -80,17 +82,23 @@ signal amplitude (default: 0).}
 \item{sd_gp_amplitude}{Numeric. Scale of the half-normal prior on the GP
 signal amplitude (default: 12).}
 
-\item{shape_car_cor}{Numeric. First shape parameter of the Beta
-prior on the CAR spatial correlation \eqn{\rho} (default: 2).}
+\item{mu_intercept}{Numeric. Mean of the normal prior on the global
+log-expression intercept mu0 (default: 0).}
 
-\item{rate_car_cor}{Numeric. Second shape parameter of the Beta
-prior on the CAR spatial correlation \eqn{\rho} (default: 2).}
+\item{sd_intercept}{Numeric. Scale of the normal prior on the global
+log-expression intercept mu0 (default: 1).}
 
-\item{mu_car_precision}{Numeric. Mean of the half-normal prior on the CAR
-precision parameter \eqn{\tau_\beta} (default: 1).}
+\item{shape_beta_rho}{Numeric. First shape parameter of the Beta
+prior on the CAR spatial correlation \eqn{a_{\rho_\beta}} (default: 2).}
 
-\item{sd_car_precision}{Numeric. Scale of the half-normal prior on the CAR
-precision parameter \eqn{\tau_\beta} (default: 1).}
+\item{rate_beta_rho}{Numeric. Second shape parameter of the Beta
+prior on the CAR spatial correlation \eqn{b_{\rho_\beta}} (default: 2).}
+
+\item{mu_beta_sig}{Numeric. Mean of the half-normal prior on the CAR
+precision parameter \eqn{\mu_{\sigma_\beta}} (default: 1).}
+
+\item{sd_beta_sig}{Numeric. Scale of the half-normal prior on the CAR
+precision parameter \eqn{\Sigma{\sigma_\beta}} (default: 1).}
 }
 \value{
 A named list with the following elements:
@@ -142,8 +150,8 @@ result <- fit_sphere(
   chains     = 4,
   sd_gp_lengthscale  = 5,
   sd_gp_amplitude    = 10,
-  shape_car_correlation = 2,
-  rate_car_correlation  = 2
+  shape_beta_rho = 0,
+  rate_beta_rho  = 2
 )
 
 # Posterior probability of each gene being spatially expressed

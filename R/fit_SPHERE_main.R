@@ -36,6 +36,11 @@
 #' @param sd_noise Numeric. Scale of the half-normal prior on observation noise
 #'   standard deviation (default: 1).
 #'
+#' @param mu_intercept Numeric. Mean of the normal prior on the global
+#'   log-expression intercept mu0 (default: 0).
+#' @param sd_intercept Numeric. Scale of the normal prior on the global
+#'   log-expression intercept mu0 (default: 1).
+#'
 #' @param mu_gp_lengthscale Numeric. Mean of the log-normal prior on the GP
 #'   lengthscale (default: 0).
 #' @param sd_gp_lengthscale Numeric. Scale of the log-normal prior on the GP
@@ -46,15 +51,15 @@
 #' @param sd_gp_amplitude Numeric. Scale of the half-normal prior on the GP
 #'   signal amplitude (default: 12).
 #'
-#' @param shape_car_cor Numeric. First shape parameter of the Beta
-#'   prior on the CAR spatial correlation \eqn{\rho} (default: 2).
-#' @param rate_car_cor Numeric. Second shape parameter of the Beta
-#'   prior on the CAR spatial correlation \eqn{\rho} (default: 2).
+#' @param shape_beta_rho Numeric. First shape parameter of the Beta
+#'   prior on the CAR spatial correlation \eqn{a_{\rho_\beta}} (default: 2).
+#' @param rate_beta_rho Numeric. Second shape parameter of the Beta
+#'   prior on the CAR spatial correlation \eqn{b_{\rho_\beta}} (default: 2).
 #'
-#' @param mu_car_precision Numeric. Mean of the half-normal prior on the CAR
-#'   precision parameter \eqn{\tau_\beta} (default: 1).
-#' @param sd_car_precision Numeric. Scale of the half-normal prior on the CAR
-#'   precision parameter \eqn{\tau_\beta} (default: 1).
+#' @param mu_beta_sig Numeric. Mean of the half-normal prior on the CAR
+#'   precision parameter \eqn{\mu_{\sigma_\beta}} (default: 1).
+#' @param sd_beta_sig Numeric. Scale of the half-normal prior on the CAR
+#'   precision parameter \eqn{\Sigma{\sigma_\beta}} (default: 1).
 #'
 #' @return A named list with the following elements:
 #' \describe{
@@ -100,8 +105,8 @@
 #'   chains     = 4,
 #'   sd_gp_lengthscale  = 5,
 #'   sd_gp_amplitude    = 10,
-#'   shape_car_correlation = 2,
-#'   rate_car_correlation  = 2
+#'   shape_beta_rho = 0,
+#'   rate_beta_rho  = 2
 #' )
 #'
 #' # Posterior probability of each gene being spatially expressed
@@ -121,8 +126,8 @@ fit_sphere <- function(data_mat,  spot, gene_group, iter_sampling = 2000, iter_w
                        stan_model_path = system.file("stan", "SPHERE_stan.stan", package = "SPHERE"),
                        chains  = 3,  seed  = 8, knots  = 30, alpha  = c(10, 3), refresh = 100,
                        mu_noise = 0, sd_noise = 1, mu_gp_lengthscale = 0, sd_gp_lengthscale = 3,
-                       mu_gp_amplitude = 0, sd_gp_amplitude = 12, shape_car_cor = 5,
-                       rate_car_cor  = 2, mu_car_precision   = 1, sd_car_precision   = 1) {
+                       mu_gp_amplitude = 0, sd_gp_amplitude = 12,  mu_intercept =0, sd_intercept = 1,
+                       shape_beta_rho = 5, rate_beta_rho = 2, mu_beta_sig = 1, sd_beta_sig = 1) {
 
   # ------------------------------------------------------------------
   # 1. Input validation
@@ -207,9 +212,9 @@ fit_sphere <- function(data_mat,  spot, gene_group, iter_sampling = 2000, iter_w
     # GP amplitude prior (half-normal)
     mu_gp_amplitude = mu_gp_amplitude, sd_gp_amplitude = sd_gp_amplitude,
     # CAR spatial correlation prior (Beta)
-    shape_car_cor = shape_car_cor, rate_car_cor  = rate_car_cor,
+    shape_beta_rho = shape_beta_rho, rate_beta_rho  = rate_beta_rho,
     # CAR precision prior (half-normal)
-    mu_car_precision   = mu_car_precision, sd_car_precision   = sd_car_precision,
+    mu_beta_sig = mu_beta_sig, sd_beta_sig = sd_beta_sig,
     # Pathway structure
     G = G,                   # number of pathways
     gene_group = gene_grp,            # pathway membership per gene (integer vector)

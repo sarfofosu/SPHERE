@@ -49,8 +49,8 @@ data {
   // allowing them to share information about expression effects.
   int<lower=1> G;                                            // Number of distinct gene groups (pathways)
   array[P] int<lower=1, upper=G> gene_group;                 // Pathway membership for each gene; gene_group[j] = which group gene j belongs to
-  real<lower=0> mu_car_precision; real<lower=0> sd_car_precision; // mean and scale of half-normal prior on sigma_beta
-  real<lower=0> shape_car_cor; real<lower=0> rate_car_cor;        // first and second shape of Beta prior on rho_CAR
+  real<lower=0> mu_beta_sig; real<lower=0> sd_beta_sig; // mean and scale of half-normal prior on sigma_beta
+  real<lower=0> shape_beta_rho; real<lower=0> rate_beta_rho;        // first and second shape of Beta prior on rho_CAR
 }
 
 
@@ -116,7 +116,7 @@ model {
     ell_gs[j] ~ lognormal(mu_gp_lengthscale, sd_gp_lengthscale);  // Prior on GP lengthscale for gene j
     w[, j] ~ normal(0, 1);                                        // Prior on GP weights for gene j;  Standard normal prior on each of the r knot weights
   }
-  sigma_beta ~ normal(mu_car_precision, sd_car_precision);        // Prior on CAR conditional SD;  Controls how dispersed gene effects are within pathways
+  sigma_beta ~ normal(mu_beta_sig, sd_beta_sig);        // Prior on CAR conditional SD;  Controls how dispersed gene effects are within pathways
   rho ~ beta(shape_car_cor, rate_car_cor);                        // Prior on CAR autocorrelation parameter; Larger a_rho pushes rho toward 1 (stronger spatial smoothing)
 
 
