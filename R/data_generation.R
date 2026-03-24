@@ -459,3 +459,37 @@ gen_genedata_model <- function(
     Y_mean  = Y_mean
   ))
 }
+
+
+## ------------------------------------------------------------
+## Function to filter genes with less total counts
+## ------------------------------------------------------------
+
+#' Filter Genes with Low Total Counts
+#'
+#' Removes genes (columns) whose total count across all spots falls
+#' below a specified threshold.
+#'
+#' @param df A matrix or data frame of gene expression counts.
+#' @param threshold Numeric. Minimum total count required to keep a
+#'   gene (default: 10).
+#' @param keep_first Logical. If TRUE, always keeps the first column
+#'   regardless of its sum (default: TRUE).
+#'
+#' @return A filtered \code{data.table} with low-count genes removed.
+#'
+#' @importFrom data.table as.data.table
+#' @export
+filter_columns_by_sum <- function(df, threshold = 10, keep_first = TRUE) {
+  ..cols_keep <- NULL  # fix R CMD CHECK note
+  dt <- as.data.table(df)
+  if (keep_first) {
+    numeric_part <- dt[, -1, with = FALSE]
+    sums         <- colSums(numeric_part, na.rm = TRUE)
+    cols_keep    <- c(names(dt)[1], names(numeric_part)[sums > threshold])
+  } else {
+    sums      <- colSums(dt, na.rm = TRUE)
+    cols_keep <- names(dt)[sums > threshold]
+  }
+  return(dt[, ..cols_keep])
+}
