@@ -446,6 +446,7 @@ gen_genedata_model <- function(
 
   return(list(
     Y       = Y,
+    spots   = spots |> as.data.frame(),
     N_i     = N_i,
     mu0     = mu0,
     Beta    = Beta,
