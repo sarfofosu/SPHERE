@@ -34,23 +34,26 @@ generate_spatial_spots <- function(num_spots, x1 = 0, x2 = 1,
 }
 
 
+
 ## ------------------------------------------------------------
 ## Function to simulate a named spatial pattern
 ## ------------------------------------------------------------
 
 #' Simulate a Spatial Expression Pattern
 #'
-#' Assigns a spatial expression pattern (e.g. hotspot, streak, gradient)
-#' to a set of spatial spots. Used internally to generate spatially
-#' expressed gene patterns for simulation studies.
+#' Generates a continuous spatial effect \eqn{\eta \in [0, 1]} for a set
+#' of spatial spots using smooth spatial patterns. Unlike binary approaches,
+#' this function returns a continuously varying spatial effect that more
+#' realistically captures gradual expression changes across tissue.
 #'
 #' @param spots A data frame with columns \code{x} and \code{y} giving
 #'   spatial coordinates.
 #' @param pat_type Character. Type of spatial pattern. One of
 #'   \code{"hotspot"}, \code{"streak"}, \code{"gradient"}, \code{"ring"},
-#'   or \code{"wave"}. Use \code{NULL} for no pattern (all low expression).
-#' @param high_exp_prop Numeric. Proportion of spots assigned to the
-#'   high-expression region (default: 0.3).
+#'   or \code{"wave"}. Use \code{NULL} for no pattern (returns zero eta).
+#' @param high_exp_prop Numeric. Controls the spatial spread of the pattern —
+#'   approximately the proportion of spots in the high-expression region
+#'   (default: 0.3).
 #' @param grad_percent Numeric. Gradient threshold in normalized coordinates
 #'   for the \code{"gradient"} pattern (default: 0.3).
 #' @param gene_id Integer or NULL. Gene index used to assign gene-specific
@@ -58,11 +61,10 @@ generate_spatial_spots <- function(num_spots, x1 = 0, x2 = 1,
 #'   (default: NULL).
 #' @param seed Integer or NULL. Random seed for reproducibility (default: NULL).
 #'
-#' @return The input \code{spots} data frame with two additional columns:
-#'   \code{eta} (numeric spatial effect) and \code{mark} (character:
-#'   \code{"high"}, \code{"medium"}, or \code{"low"}).
+#' @return A data frame with columns \code{x}, \code{y}, and \code{eta},
+#'   where \code{eta} is a continuous spatial effect in \eqn{[0, 1]}.
 #'
-#' @importFrom stats runif median
+#' @importFrom stats runif
 #' @export
 simulate_expression <- function(spots, pat_type, high_exp_prop = 0.3,
                                 grad_percent = 0.3, gene_id = NULL,
@@ -73,73 +75,69 @@ simulate_expression <- function(spots, pat_type, high_exp_prop = 0.3,
   y1 <- min(spots$y); y2 <- max(spots$y)
   x_range <- x2 - x1; y_range <- y2 - y1
 
-  spots$x_norm <- (spots$x - x1) / x_range
-  spots$y_norm <- (spots$y - y1) / y_range
+  # Guard against zero range (single row/column of spots)
+  if (x_range < 1e-12) x_range <- 1
+  if (y_range < 1e-12) y_range <- 1
 
-  num_high  <- round(high_exp_prop * nrow(spots))
-  spots$eta <- 0
+  # Normalize to [0, 1]
+  x_norm <- (spots$x - x1) / x_range
+  y_norm <- (spots$y - y1) / y_range
+  n      <- nrow(spots)
 
+  # Default: no spatial effect
+  eta <- rep(0, n)
   if (is.null(pat_type)) {
-    spots$eta <- 0
-  } else {
-    center_x <- 0.5
-    center_y <- 0.5
-
-    if (!is.null(gene_id)) {
-      center_x <- runif(1, 0.1, 0.9)
-      center_y <- runif(1, 0.1, 0.9)
-    }
-
-    if (pat_type == "hotspot") {
-      radius <- sqrt(sort((spots$x_norm - center_x)^2 +
-                            (spots$y_norm - center_y)^2)[num_high])
-      spots$eta <- as.integer((spots$x_norm - center_x)^2 +
-                                (spots$y_norm - center_y)^2 <= radius^2)
-
-    } else if (pat_type == "streak") {
-      streak_x     <- if (is.null(gene_id)) center_x else runif(1, 0.1, 0.9)
-      streak_spots <- order(abs(spots$x_norm - streak_x))[1:num_high]
-      spots$eta[streak_spots] <- 1
-
-    } else if (pat_type == "gradient") {
-      threshold_x <- grad_percent
-      spots$eta   <- pmax(0, pmin(1, (spots$x_norm - threshold_x) /
-                                    (1 - threshold_x)))
-      if (!is.null(gene_id)) {
-        shift     <- runif(1, -0.2, 0.2)
-        spots$eta <- pmax(0, pmin(1, spots$eta + shift))
-      }
-
-    } else if (pat_type == "ring") {
-      distances  <- (spots$x_norm - center_x)^2 +
-        (spots$y_norm - center_y)^2
-      ring_spots <- order(abs(distances - median(distances)))[1:num_high]
-      spots$eta[ring_spots] <- 1
-
-    } else if (pat_type == "wave") {
-      phase <- if (!is.null(gene_id)) runif(1, -1, 1) else 0
-      freq  <- if (!is.null(gene_id)) runif(1, 2.5, 5.5) else 4
-      w_y   <- sin(freq * pi * (spots$x_norm + phase))
-      y_scaled      <- (w_y - min(w_y)) / (max(w_y) - min(w_y))
-      dist_to_curve <- abs(spots$y_norm - y_scaled)
-      wave_spots    <- order(dist_to_curve)[1:num_high]
-      spots$eta[wave_spots] <- 1
-    }
+    return(data.frame(x = spots$x, y = spots$y, eta = eta))
   }
 
-  if (is.null(pat_type)) {
-    spots$mark <- "low"
+  # Gene-specific random center
+  if (!is.null(gene_id)) {
+    cx <- runif(1, 0.15, 0.85)
+    cy <- runif(1, 0.15, 0.85)
+  } else {
+    cx <- 0.5; cy <- 0.5
+  }
+
+  if (pat_type == "hotspot") {
+    dist2 <- (x_norm - cx)^2 + (y_norm - cy)^2
+    bw    <- sqrt(high_exp_prop / pi)
+    eta   <- exp(-dist2 / (2 * bw^2))
+
+  } else if (pat_type == "streak") {
+    streak_x <- if (!is.null(gene_id)) runif(1, 0.15, 0.85) else cx
+    bw  <- high_exp_prop / 2
+    eta <- exp(-(x_norm - streak_x)^2 / (2 * bw^2))
+
   } else if (pat_type == "gradient") {
-    spots$mark <- ifelse(spots$eta >= 0.75, "high",
-                         ifelse(spots$eta <= 0.40, "low", "medium"))
+    base_mid  <- 1 - grad_percent
+    midpoint  <- if (!is.null(gene_id)) runif(1, base_mid - 0.1,
+                                              base_mid + 0.1) else base_mid
+    steepness <- 10
+    eta       <- 1 / (1 + exp(-steepness * (x_norm - midpoint)))
+
+  } else if (pat_type == "ring") {
+    dist2      <- (x_norm - cx)^2 + (y_norm - cy)^2
+    target_r   <- sqrt(high_exp_prop / pi) * 1.2
+    ring_width <- 0.08
+    eta        <- exp(-(sqrt(dist2) - target_r)^2 / (2 * ring_width^2))
+
+  } else if (pat_type == "wave") {
+    phase       <- if (!is.null(gene_id)) runif(1, -1, 1) else 0
+    freq        <- if (!is.null(gene_id)) runif(1, 2.5, 5.5) else 4
+    wave_y      <- sin(freq * pi * (x_norm + phase))
+    wave_scaled <- (wave_y - min(wave_y)) /
+      (max(wave_y) - min(wave_y) + 1e-12)
+    dist_to_curve <- abs(y_norm - wave_scaled)
+    bw  <- 0.08
+    eta <- exp(-dist_to_curve^2 / (2 * bw^2))
+
   } else {
-    spots$mark <- ifelse(spots$eta >= 0.75, "high", "low")
+    warning(paste("Unknown pat_type:", pat_type, "- returning zero eta."))
   }
 
-  spots$x_norm <- NULL
-  spots$y_norm <- NULL
-
-  return(spots)
+  # Ensure eta is in [0, 1]
+  eta <- pmax(0, pmin(1, eta))
+  return(data.frame(x = spots$x, y = spots$y, eta = eta))
 }
 
 

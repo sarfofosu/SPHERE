@@ -19,10 +19,11 @@ spatial coordinates.}
 
 \item{pat_type}{Character. Type of spatial pattern. One of
 \code{"hotspot"}, \code{"streak"}, \code{"gradient"}, \code{"ring"},
-or \code{"wave"}. Use \code{NULL} for no pattern (all low expression).}
+or \code{"wave"}. Use \code{NULL} for no pattern (returns zero eta).}
 
-\item{high_exp_prop}{Numeric. Proportion of spots assigned to the
-high-expression region (default: 0.3).}
+\item{high_exp_prop}{Numeric. Controls the spatial spread of the pattern —
+approximately the proportion of spots in the high-expression region
+(default: 0.3).}
 
 \item{grad_percent}{Numeric. Gradient threshold in normalized coordinates
 for the \code{"gradient"} pattern (default: 0.3).}
@@ -34,12 +35,12 @@ random pattern centers. If NULL, uses the center of the tissue
 \item{seed}{Integer or NULL. Random seed for reproducibility (default: NULL).}
 }
 \value{
-The input \code{spots} data frame with two additional columns:
-\code{eta} (numeric spatial effect) and \code{mark} (character:
-\code{"high"}, \code{"medium"}, or \code{"low"}).
+A data frame with columns \code{x}, \code{y}, and \code{eta},
+where \code{eta} is a continuous spatial effect in \eqn{[0, 1]}.
 }
 \description{
-Assigns a spatial expression pattern (e.g. hotspot, streak, gradient)
-to a set of spatial spots. Used internally to generate spatially
-expressed gene patterns for simulation studies.
+Generates a continuous spatial effect \eqn{\eta \in [0, 1]} for a set
+of spatial spots using smooth spatial patterns. Unlike binary approaches,
+this function returns a continuously varying spatial effect that more
+realistically captures gradual expression changes across tissue.
 }
