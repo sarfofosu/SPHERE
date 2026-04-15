@@ -8,74 +8,151 @@ generate_genedata_pattern(
   spots,
   num_genes,
   prop = c(0.8, 0.2),
-  pat_type,
-  seed = NULL,
+  pat_type = "hotspot",
+  high_exp_prop = 0.3,
+  grad_percent = 0.3,
   G,
   gene_grp,
-  cor_grp,
-  tau_beta,
-  high_exp_prop = 0.3,
-  grad_percent = 0.2,
-  beta0 = 2,
-  beta1 = NULL,
-  sigma = 0.3
+  rho = 0.85,
+  tau_beta = 10,
+  eps_sd = 0.2,
+  eta_scale = 3,
+  max_count = 500,
+  zero_prop = 0.05,
+  depth_model = c("poisson", "negbin", "fixed"),
+  depth_lambda = 5,
+  depth_size = 5,
+  depth_fixed = 1,
+  target_mean = 10,
+  seed = NULL,
+  verbose = TRUE
 )
 }
 \arguments{
 \item{spots}{A data frame or matrix of spatial coordinates
-(columns \code{x} and \code{y}).}
+with columns \code{x} and \code{y}.}
 
 \item{num_genes}{Integer. Total number of genes to simulate.}
 
-\item{prop}{Numeric vector of length 2 summing to 1. Proportions of
-non-SE and SE genes respectively (default: \code{c(0.8, 0.2)}).}
+\item{prop}{Numeric vector of length 2 summing to 1.
+Proportions of non-SE and SE genes respectively
+(default: \code{c(0.8, 0.2)}).}
 
-\item{pat_type}{Character. Spatial pattern type for SE genes. One of
-\code{"hotspot"}, \code{"streak"}, \code{"gradient"}, \code{"ring"},
-or \code{"wave"}.}
+\item{pat_type}{Character vector specifying spatial pattern types for
+SE genes. Options include:
+\code{"hotspot"}, \code{"streak"}, \code{"gradient"},
+\code{"ring"}, \code{"wave"}, or \code{"mixed"}.
+If multiple values are supplied, patterns are assigned sequentially.}
+
+\item{high_exp_prop}{Numeric. Proportion of spots in the
+high-expression region for spatial patterns (default: \code{0.3}).}
+
+\item{grad_percent}{Numeric. Threshold controlling the spatial
+gradient region (default: \code{0.3}).}
+
+\item{G}{Integer. Number of biological pathway groups.}
+
+\item{gene_grp}{Integer vector of length \code{num_genes}
+specifying pathway membership for each gene.}
+
+\item{rho}{Numeric. CAR spatial correlation parameter
+controlling dependence among genes within pathways
+(default: \code{0.85}).}
+
+\item{tau_beta}{Numeric. CAR precision parameter governing
+variability of pathway effects (default: \code{10}).}
+
+\item{eps_sd}{Numeric. Standard deviation of independent
+gene-level noise on the log scale (default: \code{0.20}).}
+
+\item{eta_scale}{Numeric. Multiplicative scaling factor applied to
+spatial signal strength for SE genes (default: \code{3.0}).}
+
+\item{max_count}{Integer. Maximum allowable expected count.
+Used to cap the baseline intensity during calibration
+(default: \code{500}).}
+
+\item{zero_prop}{Numeric. Target proportion of zeros retained in
+non-SE genes after simulation. Excess zeros are replaced with
+small counts (default: \code{0.05}).}
+
+\item{depth_model}{Character specifying the sequencing depth model.
+One of:
+\describe{
+\item{\code{"poisson"}}{Poisson-distributed sequencing depth}
+\item{\code{"negbin"}}{Negative binomial sequencing depth}
+\item{\code{"fixed"}}{Constant sequencing depth}
+}}
+
+\item{depth_lambda}{Numeric. Mean sequencing depth parameter used for
+Poisson or negative binomial models (default: \code{5}).}
+
+\item{depth_size}{Numeric. Dispersion parameter for the negative
+binomial depth model (default: \code{5}).}
+
+\item{depth_fixed}{Integer. Fixed sequencing depth value when
+\code{depth_model = "fixed"} (default: \code{1}).}
+
+\item{target_mean}{Numeric. Target median expected count used to
+automatically calibrate the baseline intensity parameter
+(default: \code{10}).}
 
 \item{seed}{Integer or NULL. Random seed for reproducibility
 (default: NULL).}
 
-\item{G}{Integer. Number of biological pathway groups.}
-
-\item{gene_grp}{Integer vector of length \code{num_genes} giving
-pathway membership for each gene.}
-
-\item{cor_grp}{Numeric. CAR spatial correlation parameter \eqn{\rho}.}
-
-\item{tau_beta}{Numeric. CAR precision parameter for pathway effects.}
-
-\item{high_exp_prop}{Numeric. Proportion of spots in the
-high-expression region (default: 0.3).}
-
-\item{grad_percent}{Numeric. Gradient threshold for the
-\code{"gradient"} pattern (default: 0.2).}
-
-\item{beta0}{Numeric. Log-scale baseline expression (default: 2).}
-
-\item{beta1}{Numeric or NULL. Log-scale high expression for SE genes.
-If NULL, defaults to \code{beta0 + log(3)} (3x fold change).}
-
-\item{sigma}{Numeric. Standard deviation of log-scale noise
-(default: 0.3).}
+\item{verbose}{Logical. If TRUE, prints a simulation summary
+including counts, depth statistics, and pattern distribution
+(default: TRUE).}
 }
 \value{
-A named list with elements:
+A named list containing:
 \describe{
 \item{Y}{Integer matrix (\eqn{n \times p}) of simulated counts.}
-\item{se_idx}{Integer vector of SE gene column indices.}
-\item{nonse_idx}{Integer vector of non-SE gene column indices.}
+\item{spots}{Data frame of spatial coordinates used in simulation.}
+\item{N_i}{Integer vector of sequencing depth for each spot.}
+\item{mu0}{Auto-calibrated baseline log-mean expression level.}
 \item{Beta}{Numeric vector of CAR pathway effects.}
-\item{epsilon}{Numeric matrix of log-scale noise.}
-\item{beta0}{Baseline log-mean used.}
-\item{beta1}{High-expression log-mean used.}
+\item{epsilon}{Matrix of independent noise terms.}
+\item{eta}{Matrix of spatial pattern effects for SE genes.}
+\item{G}{Number of biological pathway groups.}
+\item{Z}{Integer vector indicating gene state (1 = non-SE, 2 = SE).}
+\item{se_idx}{Integer vector of spatially expressed gene indices.}
+\item{gene_grp}{Integer vector of pathway membership.}
+\item{lambda}{Matrix of baseline Poisson intensities.}
+\item{Y_mean}{Matrix of expected counts before sampling.}
+\item{pat_types_used}{Character vector of assigned pattern types.}
 }
 }
 \description{
-Simulates spatial transcriptomics count data with a user-specified
-spatial expression pattern. Genes are classified as spatially expressed
-(SE) or non-spatially expressed (non-SE) according to \code{prop}.
-SE genes follow a pattern defined by \code{pat_type}, while non-SE
-genes have flat Poisson expression.
+Simulates spatial transcriptomics (ST) count data with configurable
+spatial expression patterns, sequencing depth variation, pathway-level
+dependence, and realistic count calibration. Genes are classified as
+spatially expressed (SE) or non-spatially expressed (non-SE) according
+to \code{prop}. SE genes follow spatial patterns defined by
+\code{pat_type}, while non-SE genes exhibit baseline expression with
+controlled zero inflation.
+}
+\details{
+This generator incorporates:
+\itemize{
+\item Pathway-level correlation via Conditional Autoregressive (CAR) effects
+\item Spatial signal scaling through \code{eta_scale}
+\item Variable sequencing depth across spots
+\item Automatic calibration to a target mean count level
+\item Controlled zero proportion for non-SE genes
+}
+
+Counts are generated according to a Poisson model:
+\deqn{
+Y_{ij} \sim \text{Poisson}(N_i \lambda_{ij}),
+}
+where sequencing depth \eqn{N_i} varies across spatial locations and
+the log-intensity is defined as:
+\deqn{
+\log(\lambda_{ij}) =
+\mu_0 + \beta_j + \eta_{ij} + \epsilon_{ij}.
+}
+The baseline parameter \eqn{\mu_0} is automatically calibrated so that
+the simulated data achieve a target median count level specified by
+\code{target_mean}.
 }
