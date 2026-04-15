@@ -141,119 +141,88 @@ simulate_expression <- function(spots, pat_type, high_exp_prop = 0.3,
 }
 
 
+
 ## ------------------------------------------------------------
 ## Function -- Pattern-based ST count data generator
 ## ------------------------------------------------------------
 
 #' Generate Pattern-Based Spatial Transcriptomics Count Data
 #'
-#' Simulates spatial transcriptomics (ST) count data with configurable
-#' spatial expression patterns, sequencing depth variation, pathway-level
-#' dependence, and realistic count calibration. Genes are classified as
-#' spatially expressed (SE) or non-spatially expressed (non-SE) according
-#' to \code{prop}. SE genes follow spatial patterns defined by
-#' \code{pat_type}, while non-SE genes exhibit baseline expression with
-#' controlled zero inflation.
-#'
-#' This generator incorporates:
-#' \itemize{
-#'   \item Pathway-level correlation via Conditional Autoregressive (CAR) effects
-#'   \item Spatial signal scaling through \code{eta_scale}
-#'   \item Variable sequencing depth across spots
-#'   \item Automatic calibration to a target mean count level
-#'   \item Controlled zero proportion for non-SE genes
-#' }
+#' Simulates spatial transcriptomics count data with user-specified
+#' spatial expression patterns. Genes are classified as spatially expressed
+#' (SE) or non-spatially expressed (non-SE) according to \code{prop}.
+#' SE genes receive a continuous spatial effect via \code{simulate_expression}
+#' and follow spatial patterns defined by \code{pat_type},
+#' while non-SE genes have flat Poisson expression. Supports mixed patterns,
+#' library size variation, and automatic mu0 calibration.
 #'
 #' @param spots A data frame or matrix of spatial coordinates
-#'   with columns \code{x} and \code{y}.
+#'   (columns \code{x} and \code{y}).
 #' @param num_genes Integer. Total number of genes to simulate.
-#' @param prop Numeric vector of length 2 summing to 1.
-#'   Proportions of non-SE and SE genes respectively
-#'   (default: \code{c(0.8, 0.2)}).
-#' @param pat_type Character vector specifying spatial pattern types for
-#'   SE genes. Options include:
-#'   \code{"hotspot"}, \code{"streak"}, \code{"gradient"},
-#'   \code{"ring"}, \code{"wave"}, or \code{"mixed"}.
-#'   If multiple values are supplied, patterns are assigned sequentially.
-#' @param high_exp_prop Numeric. Proportion of spots in the
-#'   high-expression region for spatial patterns (default: \code{0.3}).
-#' @param grad_percent Numeric. Threshold controlling the spatial
-#'   gradient region (default: \code{0.3}).
+#' @param prop Numeric vector of length 2 summing to 1. Proportions of
+#'   non-SE and SE genes respectively (default: \code{c(0.8, 0.2)}).
+#' @param pat_type Character. Spatial pattern type for SE genes. One of
+#'   \code{"hotspot"}, \code{"streak"}, \code{"gradient"}, \code{"ring"},
+#'   \code{"wave"}, or \code{"mixed"} (randomly assigns patterns across SE
+#'   genes). Can also be a vector of pattern names of length equal to the
+#'   number of SE genes (default: \code{"hotspot"}).
+#' @param high_exp_prop Numeric. Controls the spatial spread of the pattern —
+#'   approximately the proportion of spots in the high-expression region
+#'   (default: 0.3).
+#' @param grad_percent Numeric. Gradient threshold in normalized coordinates
+#'   for the \code{"gradient"} pattern (default: 0.3).
 #' @param G Integer. Number of biological pathway groups.
-#' @param gene_grp Integer vector of length \code{num_genes}
-#'   specifying pathway membership for each gene.
-#' @param rho Numeric. CAR spatial correlation parameter
-#'   controlling dependence among genes within pathways
-#'   (default: \code{0.85}).
-#' @param tau_beta Numeric. CAR precision parameter governing
-#'   variability of pathway effects (default: \code{10}).
-#' @param eps_sd Numeric. Standard deviation of independent
-#'   gene-level noise on the log scale (default: \code{0.20}).
-#' @param eta_scale Numeric. Multiplicative scaling factor applied to
-#'   spatial signal strength for SE genes (default: \code{3.0}).
-#' @param max_count Integer. Maximum allowable expected count.
-#'   Used to cap the baseline intensity during calibration
-#'   (default: \code{500}).
-#' @param zero_prop Numeric. Target proportion of zeros retained in
-#'   non-SE genes after simulation. Excess zeros are replaced with
-#'   small counts (default: \code{0.05}).
-#' @param depth_model Character specifying the sequencing depth model.
-#'   One of:
+#' @param gene_grp Integer vector of length \code{num_genes} giving
+#'   pathway membership for each gene.
+#' @param rho Numeric. CAR spatial correlation for pathway effects
+#'   (default: 0.85).
+#' @param tau_beta Numeric. CAR precision for pathway effects (default: 10).
+#' @param eps_sd Numeric. Standard deviation of iid log-scale noise
+#'   (default: 0.20).
+#' @param eta_scale Numeric. Scaling factor applied to the continuous spatial
+#'   effect \eqn{\eta} for SE genes. Larger values increase the contrast
+#'   between SE and non-SE expression (default: 3.0).
+#' @param max_count Integer. Maximum allowed expected count per spot/gene.
+#'   Used to cap \code{mu0} and prevent unrealistically large counts (default: 500).
+#' @param zero_prop Numeric. Target proportion of true zeros in non-SE genes.
+#'   Excess zeros are replaced with small counts (1--4) to avoid
+#'   zero-inflation artifacts (default: 0.05).
+#' @param depth_model Character. Model for sequencing depth. One of
 #'   \describe{
 #'     \item{\code{"poisson"}}{Poisson-distributed sequencing depth}
 #'     \item{\code{"negbin"}}{Negative binomial sequencing depth}
 #'     \item{\code{"fixed"}}{Constant sequencing depth}
-#'   }
-#' @param depth_lambda Numeric. Mean sequencing depth parameter used for
-#'   Poisson or negative binomial models (default: \code{5}).
-#' @param depth_size Numeric. Dispersion parameter for the negative
-#'   binomial depth model (default: \code{5}).
-#' @param depth_fixed Integer. Fixed sequencing depth value when
-#'   \code{depth_model = "fixed"} (default: \code{1}).
-#' @param target_mean Numeric. Target median expected count used to
-#'   automatically calibrate the baseline intensity parameter
-#'   (default: \code{10}).
-#' @param seed Integer or NULL. Random seed for reproducibility
-#'   (default: NULL).
-#' @param verbose Logical. If TRUE, prints a simulation summary
-#'   including counts, depth statistics, and pattern distribution
-#'   (default: TRUE).
+#'   } (default: \code{"poisson"}).
+#' @param depth_lambda Numeric. Mean for Poisson or NegBin depth model
+#'   (default: 5).
+#' @param depth_size Numeric. Overdispersion for NegBin depth model —
+#'   smaller values give more overdispersion (default: 5).
+#' @param depth_fixed Numeric. Fixed library size when
+#'   \code{depth_model = "fixed"} (default: 1).
+#' @param target_mean Numeric. Desired median count used to auto-calibrate
+#'   the global intercept \code{mu0} (default: 10).
+#' @param seed Integer or NULL. Random seed for reproducibility (default: NULL).
+#' @param verbose Logical. If TRUE, prints a simulation summary (default: TRUE).
 #'
-#' @return A named list containing:
+#' @return A named list with elements:
 #' \describe{
 #'   \item{Y}{Integer matrix (\eqn{n \times p}) of simulated counts.}
-#'   \item{spots}{Data frame of spatial coordinates used in simulation.}
-#'   \item{N_i}{Integer vector of sequencing depth for each spot.}
-#'   \item{mu0}{Auto-calibrated baseline log-mean expression level.}
+#'   \item{spots}{Data frame of spatial coordinates.}
+#'   \item{N_i}{Integer vector of per-spot library sizes.}
+#'   \item{mu0}{Numeric. Auto-calibrated global log-expression intercept.}
 #'   \item{Beta}{Numeric vector of CAR pathway effects.}
-#'   \item{epsilon}{Matrix of independent noise terms.}
-#'   \item{eta}{Matrix of spatial pattern effects for SE genes.}
-#'   \item{G}{Number of biological pathway groups.}
-#'   \item{Z}{Integer vector indicating gene state (1 = non-SE, 2 = SE).}
-#'   \item{se_idx}{Integer vector of spatially expressed gene indices.}
-#'   \item{gene_grp}{Integer vector of pathway membership.}
-#'   \item{lambda}{Matrix of baseline Poisson intensities.}
-#'   \item{Y_mean}{Matrix of expected counts before sampling.}
-#'   \item{pat_types_used}{Character vector of assigned pattern types.}
+#'   \item{epsilon}{Numeric matrix of iid log-scale noise.}
+#'   \item{eta}{Numeric matrix of continuous spatial effects (n x p).}
+#'   \item{G}{Integer. Number of pathway groups.}
+#'   \item{Z}{Integer vector of true gene classifications (1=non-SE, 2=SE).}
+#'   \item{se_idx}{Integer vector of SE gene column indices.}
+#'   \item{gene_grp}{Integer vector of pathway group memberships.}
+#'   \item{lambda}{Numeric matrix of latent Poisson rates.}
+#'   \item{Y_mean}{Numeric matrix of expected counts.}
+#'   \item{pat_types_used}{Character vector of pattern types assigned to each gene.}
 #' }
 #'
-#' @details
-#' Counts are generated according to a Poisson model:
-#' \deqn{
-#' Y_{ij} \sim \text{Poisson}(N_i \lambda_{ij}),
-#' }
-#' where sequencing depth \eqn{N_i} varies across spatial locations and
-#' the log-intensity is defined as:
-#' \deqn{
-#' \log(\lambda_{ij}) =
-#' \mu_0 + \beta_j + \eta_{ij} + \epsilon_{ij}.
-#' }
-#' The baseline parameter \eqn{\mu_0} is automatically calibrated so that
-#' the simulated data achieve a target median count level specified by
-#' \code{target_mean}.
-#'
-#' @importFrom stats rnorm rpois rnbinom median quantile
-#'
+#' @importFrom stats rnorm rpois rnbinom quantile median runif
 #' @export
 generate_genedata_pattern <- function(
     spots, num_genes, prop = c(0.8, 0.2),
@@ -267,8 +236,7 @@ generate_genedata_pattern <- function(
     depth_model = c("poisson", "negbin", "fixed"),
     depth_lambda = 5, depth_size = 5, depth_fixed = 1,
     target_mean = 10,
-    seed = NULL, verbose = TRUE
-) {
+    seed = NULL, verbose = TRUE) {
 
   depth_model <- match.arg(depth_model)
   spots <- as.data.frame(spots)
@@ -284,7 +252,9 @@ generate_genedata_pattern <- function(
   n <- nrow(spots)
   P <- num_genes
 
-  # --- Sequencing depth ---
+  # ------------------------------------------------------------------
+  # 1. Sequencing depth
+  # ------------------------------------------------------------------
   if (depth_model == "poisson") {
     N_i <- rpois(n, lambda = depth_lambda) + 1L
   } else if (depth_model == "negbin") {
@@ -293,21 +263,30 @@ generate_genedata_pattern <- function(
     N_i <- rep.int(as.integer(depth_fixed), n)
   }
 
-  # --- Gene states ---
+  # ------------------------------------------------------------------
+  # 2. Gene states (SE vs non-SE)
+  # ------------------------------------------------------------------
   n_se      <- round(P * prop[2])
   se_idx    <- sort(sample(seq_len(P), n_se))
   nonse_idx <- setdiff(seq_len(P), se_idx)
-  Z <- rep(1L, P); Z[se_idx] <- 2L
+  Z         <- rep(1L, P)
+  Z[se_idx] <- 2L
 
-  # --- CAR Beta ---
+  # ------------------------------------------------------------------
+  # 3. CAR pathway effects
+  # ------------------------------------------------------------------
   Beta <- create_car_beta2(num_genes = P, gene_grp = gene_grp,
                            rho = rho, tau_beta = tau_beta)
 
-  # --- Noise ---
+  # ------------------------------------------------------------------
+  # 4. iid noise
+  # ------------------------------------------------------------------
   epsilon <- matrix(rnorm(n * P, 0, eps_sd), nrow = n, ncol = P)
 
-  # --- Spatial eta for SE genes ---
-  eta <- matrix(0, nrow = n, ncol = P)
+  # ------------------------------------------------------------------
+  # 5. Continuous spatial eta for SE genes
+  # ------------------------------------------------------------------
+  eta            <- matrix(0, nrow = n, ncol = P)
   pat_types_used <- rep("NonSE", P)
 
   if (n_se > 0) {
@@ -321,56 +300,67 @@ generate_genedata_pattern <- function(
     }
 
     for (k in seq_along(se_idx)) {
-      j <- se_idx[k]
-      patt <- simulate_expression(spots, pat_vec[k], high_exp_prop, grad_percent, gene_id = j)
-      eta[, j] <- patt$eta * eta_scale
+      j         <- se_idx[k]
+      patt      <- simulate_expression(spots, pat_vec[k], high_exp_prop, grad_percent,  gene_id = j)
+      eta[, j]          <- patt$eta * eta_scale
       pat_types_used[j] <- pat_vec[k]
     }
   }
 
-  # --- Auto-calibrate mu0 ---
+  # ------------------------------------------------------------------
+  # 6. Auto-calibrate mu0
+  # ------------------------------------------------------------------
   log_part <- sweep(epsilon + eta, 2, Beta, `+`)
   mu0      <- log(target_mean) - log(median(N_i)) - median(log_part)
 
-  # --- Clamp mu0 so max expected count <= max_count ---
+  # Cap mu0 so max expected count <= max_count
   mu0_cap <- log(max_count) - log(max(N_i)) - max(log_part)
   mu0     <- min(mu0, mu0_cap)
 
-  # --- Generate counts ---
+  # ------------------------------------------------------------------
+  # 7. Generate counts
+  # ------------------------------------------------------------------
   lambda <- exp(mu0 + log_part)
   Y_mean <- outer(N_i, rep(1, P)) * lambda
-  Y      <- matrix(rpois(n * P, lambda = as.vector(Y_mean)), nrow = n, ncol = P)
+  Y      <- matrix(rpois(n * P, lambda = as.vector(Y_mean)),
+                   nrow = n, ncol = P)
 
-  # --- Replace excess zeros in Non-SE genes ---
-  # Keep only zero_prop fraction as true zeros, rest become small counts (1-4)
+  # ------------------------------------------------------------------
+  # 8. Replace excess zeros in non-SE genes
+  # ------------------------------------------------------------------
   for (j in nonse_idx) {
     zero_idx <- which(Y[, j] == 0)
     n_zeros  <- length(zero_idx)
     if (n_zeros == 0) next
-
-    # How many zeros to keep
     n_keep <- round(n * zero_prop)
     n_fill <- max(0, n_zeros - n_keep)
-
     if (n_fill > 0) {
-      fill_idx <- sample(zero_idx, n_fill)
+      fill_idx    <- sample(zero_idx, n_fill)
       Y[fill_idx, j] <- sample(1:4, n_fill, replace = TRUE)
     }
   }
 
-  # --- Gene names ---
-  gene_names <- character(P)
+  # ------------------------------------------------------------------
+  # 9. Gene names
+  # ------------------------------------------------------------------
+  gene_names            <- character(P)
   gene_names[nonse_idx] <- paste0("Gene", nonse_idx, "_NonSE")
-  for (j in se_idx) gene_names[j] <- paste0("Gene", j, "_SE_", pat_types_used[j])
+  for (j in se_idx) {
+    gene_names[j] <- paste0("Gene", j, "_SE_", pat_types_used[j])
+  }
   colnames(Y) <- gene_names
 
+  # ------------------------------------------------------------------
+  # 10. Summary
+  # ------------------------------------------------------------------
   if (verbose) {
     cat("---- ST Pattern Simulation Summary ----\n")
     cat("n spots:", n, " | P genes:", P, "\n")
     cat("SE genes:", n_se, " (", round(100 * n_se / P, 1), "%)\n", sep = "")
     if (n_se > 0) {
       pat_tab <- table(pat_types_used[se_idx])
-      cat("Patterns:", paste(names(pat_tab), "=", pat_tab, collapse = ", "), "\n")
+      cat("Patterns :", paste(names(pat_tab), "=", pat_tab,
+                              collapse = ", "), "\n")
       cat("eta_scale:", eta_scale, "\n")
     }
     cat("zero_prop:", zero_prop, "\n")
@@ -378,24 +368,38 @@ generate_genedata_pattern <- function(
         " | median N_i:", median(N_i),
         " | range:", paste(range(N_i), collapse = " - "), "\n")
     cat("mu0 (auto-calibrated):", signif(mu0, 4), "\n")
-    cat("Non-SE zero %        :", round(100 * mean(Y[, nonse_idx] == 0), 1), "%\n")
+    cat("Non-SE zero %        :",
+        round(100 * mean(Y[, nonse_idx] == 0), 1), "%\n")
     cat("Expected mean counts : median =", signif(median(Y_mean), 4),
-        " | 95% =", paste(signif(quantile(as.vector(Y_mean), c(.025, .975)), 4), collapse = ", "),
+        " | 95% =", paste(signif(quantile(as.vector(Y_mean),
+                                          c(.025, .975)), 4),
+                          collapse = ", "),
         " | max =", signif(max(Y_mean), 4), "\n")
     cat("Observed counts      : median =", median(Y),
-        " | 95% =", paste(quantile(as.vector(Y), c(.025, .975)), collapse = ", "),
+        " | 95% =", paste(quantile(as.vector(Y), c(.025, .975)),
+                          collapse = ", "),
         " | max =", max(Y), "\n")
     cat("---------------------------------------\n")
   }
 
   return(list(
-    Y = Y, spots = spots, N_i = N_i, mu0 = mu0,
-    Beta = Beta, epsilon = epsilon, eta = eta, G=G,
-    Z = Z, se_idx = se_idx, gene_grp = gene_grp,
-    lambda = lambda, Y_mean = Y_mean,
+    Y              = Y,
+    spots          = spots,
+    N_i            = N_i,
+    mu0            = mu0,
+    Beta           = Beta,
+    epsilon        = epsilon,
+    eta            = eta,
+    G              = G,
+    Z              = Z,
+    se_idx         = se_idx,
+    gene_grp       = gene_grp,
+    lambda         = lambda,
+    Y_mean         = Y_mean,
     pat_types_used = pat_types_used
   ))
 }
+
 
 
 ## ------------------------------------------------------------
