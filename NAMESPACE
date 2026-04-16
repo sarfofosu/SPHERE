@@ -2,8 +2,8 @@
 
 export(filter_columns_by_sum)
 export(fit_sphere)
-export(gen_genedata_model)
 export(generate_gene_grp)
+export(generate_genedata_model)
 export(generate_genedata_pattern)
 export(generate_spatial_spots)
 export(get_tau_ell)

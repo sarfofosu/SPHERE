@@ -114,6 +114,13 @@ A named list with elements:
 \item{lambda}{Numeric matrix of latent Poisson rates.}
 \item{Y_mean}{Numeric matrix of expected counts.}
 \item{pat_types_used}{Character vector of pattern types assigned to each gene.}
+\item{param}{Named list of all simulation parameters used, including
+\code{pattern}, \code{n}, \code{p}, \code{prop}, \code{seed},
+\code{high_exp_prop}, \code{grad_percent}, \code{rho},
+\code{tau_beta}, \code{eps_sd}, \code{eta_scale}, \code{zero_prop},
+\code{depth_model}, \code{depth_lambda}, \code{depth_size},
+\code{depth_fixed}, and \code{target_mean}. Useful for
+reproducibility and diagnostics.}
 }
 }
 \description{

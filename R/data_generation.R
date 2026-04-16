@@ -220,6 +220,13 @@ simulate_expression <- function(spots, pat_type, high_exp_prop = 0.3,
 #'   \item{lambda}{Numeric matrix of latent Poisson rates.}
 #'   \item{Y_mean}{Numeric matrix of expected counts.}
 #'   \item{pat_types_used}{Character vector of pattern types assigned to each gene.}
+#'   \item{param}{Named list of all simulation parameters used, including
+#'     \code{pattern}, \code{n}, \code{p}, \code{prop}, \code{seed},
+#'     \code{high_exp_prop}, \code{grad_percent}, \code{rho},
+#'     \code{tau_beta}, \code{eps_sd}, \code{eta_scale}, \code{zero_prop},
+#'     \code{depth_model}, \code{depth_lambda}, \code{depth_size},
+#'     \code{depth_fixed}, and \code{target_mean}. Useful for
+#'     reproducibility and diagnostics.}
 #' }
 #'
 #' @importFrom stats rnorm rpois rnbinom quantile median runif
@@ -396,7 +403,12 @@ generate_genedata_pattern <- function(
     gene_grp       = gene_grp,
     lambda         = lambda,
     Y_mean         = Y_mean,
-    pat_types_used = pat_types_used
+    pat_types_used = pat_types_used,
+    param          = list(pattern = pat_type, n = n, p = P, prop = prop, seed = seed,
+                          high_exp_prop = high_exp_prop, grad_percent = grad_percent,
+                          rho = rho, tau_beta = tau_beta, eps_sd = eps_sd, eta_scale = eta_scale,
+                          zero_prop = zero_prop, depth_model = depth_model, depth_lambda = depth_lambda,
+                          depth_size = depth_size, depth_fixed = depth_fixed, target_mean = target_mean)
   ))
 }
 
@@ -406,7 +418,7 @@ generate_genedata_pattern <- function(
 ## Function -- SPHERE model data generator
 ## ------------------------------------------------------------
 
-#' Generate SPHERE Model Simulation Data
+#' Generate Model-Based Spatial Transcriptomics Count Data
 #'
 #' Simulates spatial transcriptomics count data consistent with the
 #' SPHERE model. Includes library size variation, CAR pathway effects,
@@ -434,8 +446,11 @@ generate_genedata_pattern <- function(
 #' @param eps_sd Numeric. Standard deviation of iid log-scale noise
 #'   (default: 0.20).
 #' @param depth_model Character. Model for sequencing depth. One of
-#'   \code{"poisson"}, \code{"negbin"}, or \code{"fixed"}
-#'   (default: \code{"poisson"}).
+#'   \describe{
+#'     \item{\code{"poisson"}}{Poisson-distributed sequencing depth}
+#'     \item{\code{"negbin"}}{Negative binomial sequencing depth}
+#'     \item{\code{"fixed"}}{Constant sequencing depth}
+#'   } (default: \code{"poisson"}).
 #' @param depth_lambda Numeric. Mean for Poisson or NegBin depth
 #'   (default: 5).
 #' @param depth_size Numeric. Overdispersion for NegBin depth —
@@ -452,36 +467,51 @@ generate_genedata_pattern <- function(
 #' @return A named list with elements:
 #' \describe{
 #'   \item{Y}{Integer matrix (\eqn{n \times p}) of simulated counts.}
+#'   \item{spots}{Data frame of spatial coordinates.}
 #'   \item{N_i}{Integer vector of per-spot library sizes.}
 #'   \item{mu0}{Numeric. Auto-calibrated global log-expression intercept.}
 #'   \item{Beta}{Numeric vector of CAR pathway effects.}
 #'   \item{epsilon}{Numeric matrix of iid log-scale noise.}
-#'   \item{eta}{Numeric matrix of GP spatial effects.}
+#'   \item{eta}{Numeric matrix of GP spatial effects (n x p).}
+#'   \item{G}{Integer. Number of pathway groups.}
 #'   \item{Z}{Integer vector of true gene classifications (1=non-SE, 2=SE).}
 #'   \item{se_idx}{Integer vector of SE gene indices.}
+#'   \item{gene_grp}{Integer vector of pathway group memberships.}
 #'   \item{tau_gs}{Numeric vector of GP amplitudes for SE genes.}
 #'   \item{ell_gs}{Numeric vector of GP lengthscales for SE genes.}
 #'   \item{lambda}{Numeric matrix of latent Poisson rates.}
 #'   \item{Y_mean}{Numeric matrix of expected counts.}
+#'   \item{param}{Named list of all simulation parameters used, including
+#'     \code{pattern}, \code{n}, \code{p}, \code{prop}, \code{seed},
+#'     \code{rho}, \code{tau_beta}, \code{eps_sd}, \code{nugget},
+#'     \code{depth_model}, \code{depth_lambda}, \code{depth_size},
+#'     \code{depth_fixed}, and \code{target_mean}. Useful for
+#'     reproducibility and diagnostics.}
 #' }
 #'
 #' @importFrom stats rnorm rpois rnbinom quantile median runif
 #' @export
-gen_genedata_model <- function(
+generate_genedata_model <- function(
     spots, num_genes, prop = c(0.8, 0.2), G, gene_grp,
-    rho = 0.85, tau_beta = 10, tau_gs = NULL, ell_gs = NULL,
-    nugget = 1e-6, eps_sd = 0.20,
+    rho          = 0.85,
+    tau_beta     = 10,
+    tau_gs       = NULL,
+    ell_gs       = NULL,
+    nugget       = 1e-6,
+    eps_sd       = 0.20,
     depth_model  = c("poisson", "negbin", "fixed"),
     depth_lambda = 5,
     depth_size   = 5,
     depth_fixed  = 1,
     target_mean  = 10,
-    seed = NULL, verbose = TRUE) {
+    seed         = NULL,
+    verbose      = TRUE) {
 
   depth_model <- match.arg(depth_model)
 
   stopifnot(is.matrix(spots) || is.data.frame(spots))
-  spots <- as.matrix(spots)
+  spots_df <- as.data.frame(spots)
+  spots    <- as.matrix(spots)
   stopifnot(ncol(spots) >= 2)
 
   if (length(prop) != 2 || any(prop < 0) || abs(sum(prop) - 1) > 1e-8)
@@ -495,6 +525,9 @@ gen_genedata_model <- function(
   n <- nrow(spots)
   P <- num_genes
 
+  # ------------------------------------------------------------------
+  # 1. Sequencing depth
+  # ------------------------------------------------------------------
   if (depth_model == "poisson") {
     N_i <- rpois(n, lambda = depth_lambda) + 1L
   } else if (depth_model == "negbin") {
@@ -503,51 +536,80 @@ gen_genedata_model <- function(
     N_i <- rep.int(as.integer(depth_fixed), n)
   }
 
+  # ------------------------------------------------------------------
+  # 2. Gene states (SE vs non-SE)
+  # ------------------------------------------------------------------
   n_se      <- round(P * prop[2])
   se_idx    <- sort(sample(seq_len(P), n_se))
   nonse_idx <- setdiff(seq_len(P), se_idx)
   Z         <- rep(1L, P)
   Z[se_idx] <- 2L
 
-  Beta    <- create_car_beta2(num_genes = P, gene_grp = gene_grp,
-                              rho = rho, tau_beta = tau_beta)
+  # ------------------------------------------------------------------
+  # 3. CAR pathway effects
+  # ------------------------------------------------------------------
+  Beta <- create_car_beta2(num_genes = P, gene_grp = gene_grp,
+                           rho = rho, tau_beta = tau_beta)
+
+  # ------------------------------------------------------------------
+  # 4. iid noise
+  # ------------------------------------------------------------------
   epsilon <- matrix(rnorm(n * P, mean = 0, sd = eps_sd), nrow = n, ncol = P)
-  eta     <- matrix(0, nrow = n, ncol = P)
+
+  # ------------------------------------------------------------------
+  # 5. GP spatial effects for SE genes
+  # ------------------------------------------------------------------
+  eta <- matrix(0, nrow = n, ncol = P)
 
   if (n_se > 0) {
     if (is.null(tau_gs)) tau_gs <- runif(n_se, 0.05, 0.30)
     if (is.null(ell_gs)) ell_gs <- runif(n_se, 0.50, 2.00)
 
-    if (length(tau_gs) != n_se) stop("tau_gs must have length = number of SE genes.")
-    if (length(ell_gs) != n_se) stop("ell_gs must have length = number of SE genes.")
+    if (length(tau_gs) != n_se)
+      stop("tau_gs must have length = number of SE genes.")
+    if (length(ell_gs) != n_se)
+      stop("ell_gs must have length = number of SE genes.")
 
-    eta_se        <- sim_gs_eta2(spots = spots[, 1:2, drop = FALSE],
+    eta_se        <- sim_gs_eta2(spots     = spots[, 1:2, drop = FALSE],
                                  num_genes = n_se,
-                                 tau_gs = tau_gs, ell_gs = ell_gs,
-                                 nugget = nugget)
+                                 tau_gs    = tau_gs,
+                                 ell_gs    = ell_gs,
+                                 nugget    = nugget)
     eta[, se_idx] <- eta_se
   } else {
     tau_gs <- numeric(0)
     ell_gs <- numeric(0)
   }
 
+  # ------------------------------------------------------------------
+  # 6. Auto-calibrate mu0
+  # ------------------------------------------------------------------
   log_part <- sweep(epsilon + eta, 2, Beta, `+`)
   mu0      <- log(target_mean) - log(median(N_i)) - median(log_part)
 
+  # ------------------------------------------------------------------
+  # 7. Generate counts
+  # ------------------------------------------------------------------
   lambda <- exp(mu0 + log_part)
   Y_mean <- outer(N_i, rep(1, P)) * lambda
   Y      <- matrix(rpois(n * P, lambda = as.vector(Y_mean)),
                    nrow = n, ncol = P)
 
+  # ------------------------------------------------------------------
+  # 8. Gene names
+  # ------------------------------------------------------------------
   gene_names            <- character(P)
   gene_names[nonse_idx] <- paste0("Gene", nonse_idx, "_NonSE")
-  gene_names[se_idx]    <- paste0("Gene", se_idx, "_SE_model")
+  gene_names[se_idx]    <- paste0("Gene", se_idx,    "_SE_model")
   colnames(Y)           <- gene_names
 
+  # ------------------------------------------------------------------
+  # 9. Summary
+  # ------------------------------------------------------------------
   if (verbose) {
     cat("---- ST Simulation Summary ----\n")
     cat("n spots:", n, " | P genes:", P, "\n")
-    cat("SE genes:", n_se, " (", round(100 * n_se / P, 1), "% )\n", sep = "")
+    cat("SE genes:", n_se, " (", round(100 * n_se / P, 1), "%)\n", sep = "")
     cat("Depth model:", depth_model,
         " | median N_i:", median(N_i),
         " | range:", paste(range(N_i), collapse = " - "), "\n")
@@ -564,22 +626,36 @@ gen_genedata_model <- function(
     cat("-------------------------------\n")
   }
 
+  # ------------------------------------------------------------------
+  # 10. Return results
+  # ------------------------------------------------------------------
   return(list(
-    Y       = Y,
-    spots   = spots |> as.data.frame(),
-    N_i     = N_i,
-    mu0     = mu0,
-    Beta    = Beta,
-    epsilon = epsilon,
-    eta     = eta,
-    Z       = Z,
-    se_idx  = se_idx,
-    tau_gs  = tau_gs,
-    ell_gs  = ell_gs,
-    lambda  = lambda,
-    Y_mean  = Y_mean
+    Y        = Y,
+    spots    = spots_df,
+    N_i      = N_i,
+    mu0      = mu0,
+    Beta     = Beta,
+    epsilon  = epsilon,
+    eta      = eta,
+    G        = G,
+    Z        = Z,
+    gene_grp = gene_grp,
+    se_idx   = se_idx,
+    tau_gs   = tau_gs,
+    ell_gs   = ell_gs,
+    lambda   = lambda,
+    Y_mean   = Y_mean,
+    param    = list(
+      pattern = "model", n = n, p = P, prop = prop,  seed = seed,
+      rho = rho,   tau_beta = tau_beta, eps_sd = eps_sd,  nugget = nugget,
+      depth_model  = depth_model, depth_lambda = depth_lambda,
+      depth_size   = depth_size,  depth_fixed  = depth_fixed,  target_mean  = target_mean
+    )
   ))
 }
+
+
+
 
 
 ## ------------------------------------------------------------

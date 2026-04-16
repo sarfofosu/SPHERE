@@ -50,7 +50,7 @@ spots    <- generate_spatial_spots(
 # A2. Generate synthetic data
 # ----------------------------------------------------------------------------
 
-sim_data <- gen_genedata_model(
+sim_data <- generate_genedata_model(
   spots        = spots,
   num_genes    = num_genes,
   prop         = prop,
