@@ -5,7 +5,11 @@
 \title{Generate Model-Based Spatial Transcriptomics Count Data}
 \usage{
 generate_genedata_model(
-  spots,
+  num_spots,
+  x1 = 0,
+  x2 = 1,
+  y1 = 0,
+  y2 = 1,
   num_genes,
   prop = c(0.8, 0.2),
   G,
@@ -26,8 +30,15 @@ generate_genedata_model(
 )
 }
 \arguments{
-\item{spots}{A matrix or data frame of spatial coordinates
-(at least 2 columns: x, y).}
+\item{num_spots}{Integer. Number of spatial spots to generate.}
+
+\item{x1}{Numeric. Minimum x-coordinate (default: 0).}
+
+\item{x2}{Numeric. Maximum x-coordinate (default: 1).}
+
+\item{y1}{Numeric. Minimum y-coordinate (default: 0).}
+
+\item{y2}{Numeric. Maximum y-coordinate (default: 1).}
 
 \item{num_genes}{Integer. Total number of genes to simulate.}
 

@@ -23,3 +23,4 @@ Computes a radial basis function (RBF) basis matrix using \code{r}
 knot centers selected by k-means clustering. Used to construct the
 low-rank GP approximation in SPHERE.
 }
+\keyword{internal}

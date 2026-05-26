@@ -19,3 +19,4 @@ Euclidean distances from spots to knots.
 Computes the matrix of Euclidean distances from each spatial spot
 to each of \code{r} knot centers selected by k-means clustering.
 }
+\keyword{internal}

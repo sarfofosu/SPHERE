@@ -72,7 +72,7 @@ plot_gene_data <- function(gene_df, spot, genes = NULL, nrow = 1) {
 #' @return A filtered \code{data.table} with low-count genes removed.
 #'
 #' @importFrom data.table as.data.table
-#' @export
+#' @keywords internal
 filter_columns_by_sum <- function(df, threshold = 10, keep_first = TRUE) {
   ..cols_keep <- NULL  # fix R CMD CHECK note
   dt <- as.data.table(df)
@@ -107,7 +107,7 @@ filter_columns_by_sum <- function(df, threshold = 10, keep_first = TRUE) {
 #'   the RBF basis function values.
 #'
 #' @importFrom stats kmeans dist median
-#' @export
+#' @keywords internal
 make_rbf_basis <- function(coords, r = 30, lengthscale = 1.5) {
   N  <- nrow(coords)
   km <- kmeans(coords, centers = r)
@@ -138,7 +138,7 @@ make_rbf_basis <- function(coords, r = 30, lengthscale = 1.5) {
 #'   Euclidean distances from spots to knots.
 #'
 #' @importFrom stats kmeans dist
-#' @export
+#' @keywords internal
 make_rbf_dist <- function(coords, r = 30) {
   coords <- as.matrix(coords)
   N      <- nrow(coords)
@@ -166,7 +166,7 @@ make_rbf_dist <- function(coords, r = 30) {
 #' @return An integer vector of length \code{p} giving pathway group
 #'   membership for each gene.
 #'
-#' @export
+#' @keywords internal
 generate_gene_grp <- function(p, G = 3) {
   reps <- ceiling(p / G)
   rep(1:G, each = reps)[1:p]
@@ -191,7 +191,7 @@ generate_gene_grp <- function(p, G = 3) {
 #' @return A named list with elements \code{tau_gs} and \code{ell_gs},
 #'   each a numeric vector of length \code{round(prop[2] * p)}.
 #'
-#' @export
+#' @keywords internal
 get_tau_ell <- function(p, prop, t_gs, l_gs) {
   se_count <- round(prop[2] * p)
   list(
@@ -215,7 +215,7 @@ get_tau_ell <- function(p, prop, t_gs, l_gs) {
 #' @return A numeric vector or matrix of relative expression values
 #'   scaled to \eqn{[0, 1]}.
 #'
-#' @export
+#' @keywords internal
 relative_expr <- function(raw_exp) {
   raw_exp_log <- log1p(raw_exp)
   (raw_exp_log - min(raw_exp_log)) / (max(raw_exp_log) - min(raw_exp_log))

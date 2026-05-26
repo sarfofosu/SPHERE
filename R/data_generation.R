@@ -23,7 +23,7 @@
 #'   the spatial coordinates of each spot.
 #'
 #' @importFrom stats runif
-#' @export
+#' @keywords internal
 generate_spatial_spots <- function(num_spots, x1 = 0, x2 = 1,
                                    y1 = 0, y2 = 1, seed = NULL) {
   if (!is.null(seed)) set.seed(seed)
@@ -46,8 +46,16 @@ generate_spatial_spots <- function(num_spots, x1 = 0, x2 = 1,
 #' this function returns a continuously varying spatial effect that more
 #' realistically captures gradual expression changes across tissue.
 #'
-#' @param spots A data frame with columns \code{x} and \code{y} giving
-#'   spatial coordinates.
+#'
+#' @param spots A data frame with columns \code{x} and \code{y} giving spatial coordinates.
+#'   If NULL, spots are generated internally using \code{num_spots},
+#'   \code{x1}, \code{x2}, \code{y1}, \code{y2} (default: NULL).
+#' @param num_spots Integer. Number of spots to generate if \code{spots}
+#'   is NULL (default: NULL).
+#' @param x1 Numeric. Minimum x-coordinate if generating spots (default: 0).
+#' @param x2 Numeric. Maximum x-coordinate if generating spots (default: 1).
+#' @param y1 Numeric. Minimum y-coordinate if generating spots (default: 0).
+#' @param y2 Numeric. Maximum y-coordinate if generating spots (default: 1).
 #' @param pat_type Character. Type of spatial pattern. One of
 #'   \code{"hotspot"}, \code{"streak"}, \code{"gradient"}, \code{"ring"},
 #'   or \code{"wave"}. Use \code{NULL} for no pattern (returns zero eta).
@@ -66,10 +74,19 @@ generate_spatial_spots <- function(num_spots, x1 = 0, x2 = 1,
 #'
 #' @importFrom stats runif
 #' @export
-simulate_expression <- function(spots, pat_type, high_exp_prop = 0.3,
-                                grad_percent = 0.3, gene_id = NULL,
-                                seed = NULL) {
+simulate_expression <- function(spots = NULL, pat_type, high_exp_prop = 0.3, grad_percent = 0.3,
+                                num_spots = NULL, x1 = 0, x2 = 1, y1 = 0, y2 = 1,
+                                gene_id = NULL, seed = NULL) {
   if (!is.null(seed)) set.seed(seed)
+
+  # Generate spots internally if not provided
+  if (is.null(spots)) {
+    if (is.null(num_spots)) {
+      stop("`num_spots` must be provided when `spots` is NULL.",
+           call. = FALSE)
+    }
+    spots <- generate_spatial_spots(num_spots, x1, x2, y1, y2)
+  }
 
   x1 <- min(spots$x); x2 <- max(spots$x)
   y1 <- min(spots$y); y2 <- max(spots$y)
@@ -156,8 +173,11 @@ simulate_expression <- function(spots, pat_type, high_exp_prop = 0.3,
 #' while non-SE genes have flat Poisson expression. Supports mixed patterns,
 #' library size variation, and automatic mu0 calibration.
 #'
-#' @param spots A data frame or matrix of spatial coordinates
-#'   (columns \code{x} and \code{y}).
+#' @param num_spots Integer. Number of spatial spots to generate.
+#' @param x1 Numeric. Minimum x-coordinate (default: 0).
+#' @param x2 Numeric. Maximum x-coordinate (default: 1).
+#' @param y1 Numeric. Minimum y-coordinate (default: 0).
+#' @param y2 Numeric. Maximum y-coordinate (default: 1).
 #' @param num_genes Integer. Total number of genes to simulate.
 #' @param prop Numeric vector of length 2 summing to 1. Proportions of
 #'   non-SE and SE genes respectively (default: \code{c(0.8, 0.2)}).
@@ -232,7 +252,8 @@ simulate_expression <- function(spots, pat_type, high_exp_prop = 0.3,
 #' @importFrom stats rnorm rpois rnbinom quantile median runif
 #' @export
 generate_genedata_pattern <- function(
-    spots, num_genes, prop = c(0.8, 0.2),
+    num_spots, x1 = 0, x2 = 1, y1 = 0, y2 = 1,
+    num_genes, prop = c(0.8, 0.2),
     pat_type = "hotspot",
     high_exp_prop = 0.3, grad_percent = 0.3,
     G, gene_grp,
@@ -246,8 +267,7 @@ generate_genedata_pattern <- function(
     seed = NULL, verbose = TRUE) {
 
   depth_model <- match.arg(depth_model)
-  spots <- as.data.frame(spots)
-  if (!all(c("x", "y") %in% names(spots))) names(spots)[1:2] <- c("x", "y")
+  spots <- generate_spatial_spots(num_spots, x1, x2, y1, y2, seed = seed)
 
   if (length(prop) != 2 || any(prop < 0) || abs(sum(prop) - 1) > 1e-8)
     stop("prop must be length-2 and sum to 1.")
@@ -425,8 +445,11 @@ generate_genedata_pattern <- function(
 #' gene-specific Gaussian Process spatial effects, and auto-calibrated
 #' baseline expression.
 #'
-#' @param spots A matrix or data frame of spatial coordinates
-#'   (at least 2 columns: x, y).
+#' @param num_spots Integer. Number of spatial spots to generate.
+#' @param x1 Numeric. Minimum x-coordinate (default: 0).
+#' @param x2 Numeric. Maximum x-coordinate (default: 1).
+#' @param y1 Numeric. Minimum y-coordinate (default: 0).
+#' @param y2 Numeric. Maximum y-coordinate (default: 1).
 #' @param num_genes Integer. Total number of genes to simulate.
 #' @param prop Numeric vector of length 2 summing to 1. Proportions of
 #'   non-SE and SE genes respectively (default: \code{c(0.8, 0.2)}).
@@ -492,7 +515,8 @@ generate_genedata_pattern <- function(
 #' @importFrom stats rnorm rpois rnbinom quantile median runif
 #' @export
 generate_genedata_model <- function(
-    spots, num_genes, prop = c(0.8, 0.2), G, gene_grp,
+    num_spots, x1 = 0, x2 = 1, y1 = 0, y2 = 1,
+    num_genes, prop = c(0.8, 0.2), G, gene_grp,
     rho          = 0.85,
     tau_beta     = 10,
     tau_gs       = NULL,
@@ -508,10 +532,10 @@ generate_genedata_model <- function(
     verbose      = TRUE) {
 
   depth_model <- match.arg(depth_model)
-
-  stopifnot(is.matrix(spots) || is.data.frame(spots))
+  spots    <- generate_spatial_spots(num_spots, x1, x2, y1, y2)
   spots_df <- as.data.frame(spots)
   spots    <- as.matrix(spots)
+
   stopifnot(ncol(spots) >= 2)
 
   if (length(prop) != 2 || any(prop < 0) || abs(sum(prop) - 1) > 1e-8)
@@ -676,7 +700,7 @@ generate_genedata_model <- function(
 #' @return A filtered \code{data.table} with low-count genes removed.
 #'
 #' @importFrom data.table as.data.table
-#' @export
+#' @keywords internal
 filter_columns_by_sum <- function(df, threshold = 10, keep_first = TRUE) {
   ..cols_keep <- NULL  # fix R CMD CHECK note
   dt <- as.data.table(df)

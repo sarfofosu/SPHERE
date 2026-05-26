@@ -27,3 +27,4 @@ the spatial coordinates of each spot.
 Generates a data frame of random spatial coordinates for a given number
 of spots within a specified bounding box.
 }
+\keyword{internal}

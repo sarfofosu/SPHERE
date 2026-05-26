@@ -17,3 +17,4 @@ scaled to \eqn{[0, 1]}.
 Applies a log1p transformation followed by min-max normalization
 to convert raw counts to relative expression values in \eqn{[0, 1]}.
 }
+\keyword{internal}

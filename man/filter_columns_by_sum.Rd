@@ -29,3 +29,4 @@ below a specified threshold.
 Removes genes (columns) whose total count across all spots falls
 below a specified threshold.
 }
+\keyword{internal}

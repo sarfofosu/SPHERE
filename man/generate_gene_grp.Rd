@@ -20,3 +20,4 @@ Assigns genes to \code{G} pathway groups in a round-robin fashion.
 Genes are assigned sequentially: gene 1 to group 1, gene 2 to group
 2, ..., gene G to group G, gene G+1 to group 1, and so on.
 }
+\keyword{internal}

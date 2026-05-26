@@ -24,3 +24,4 @@ each a numeric vector of length \code{round(prop[2] * p)}.
 Extracts the GP amplitude (tau) and lengthscale (ell) parameters
 for spatially expressed (SE) genes based on a given proportion.
 }
+\keyword{internal}

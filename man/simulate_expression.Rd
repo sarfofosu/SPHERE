@@ -5,17 +5,23 @@
 \title{Simulate a Spatial Expression Pattern}
 \usage{
 simulate_expression(
-  spots,
+  spots = NULL,
   pat_type,
   high_exp_prop = 0.3,
   grad_percent = 0.3,
+  num_spots = NULL,
+  x1 = 0,
+  x2 = 1,
+  y1 = 0,
+  y2 = 1,
   gene_id = NULL,
   seed = NULL
 )
 }
 \arguments{
-\item{spots}{A data frame with columns \code{x} and \code{y} giving
-spatial coordinates.}
+\item{spots}{A data frame with columns \code{x} and \code{y} giving spatial coordinates.
+If NULL, spots are generated internally using \code{num_spots},
+\code{x1}, \code{x2}, \code{y1}, \code{y2} (default: NULL).}
 
 \item{pat_type}{Character. Type of spatial pattern. One of
 \code{"hotspot"}, \code{"streak"}, \code{"gradient"}, \code{"ring"},
@@ -27,6 +33,17 @@ approximately the proportion of spots in the high-expression region
 
 \item{grad_percent}{Numeric. Gradient threshold in normalized coordinates
 for the \code{"gradient"} pattern (default: 0.3).}
+
+\item{num_spots}{Integer. Number of spots to generate if \code{spots}
+is NULL (default: NULL).}
+
+\item{x1}{Numeric. Minimum x-coordinate if generating spots (default: 0).}
+
+\item{x2}{Numeric. Maximum x-coordinate if generating spots (default: 1).}
+
+\item{y1}{Numeric. Minimum y-coordinate if generating spots (default: 0).}
+
+\item{y2}{Numeric. Maximum y-coordinate if generating spots (default: 1).}
 
 \item{gene_id}{Integer or NULL. Gene index used to assign gene-specific
 random pattern centers. If NULL, uses the center of the tissue
