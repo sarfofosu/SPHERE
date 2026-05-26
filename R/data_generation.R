@@ -252,18 +252,11 @@ simulate_expression <- function(spots = NULL, pat_type, high_exp_prop = 0.3, gra
 #' @importFrom stats rnorm rpois rnbinom quantile median runif
 #' @export
 generate_genedata_pattern <- function(
-    num_spots, x1 = 0, x2 = 1, y1 = 0, y2 = 1,
-    num_genes, prop = c(0.8, 0.2),
-    pat_type = "hotspot",
-    high_exp_prop = 0.3, grad_percent = 0.3,
-    G, gene_grp,
-    rho = 0.85, tau_beta = 10,
-    eps_sd = 0.20, eta_scale = 3.0,
-    max_count = 500,
-    zero_prop = 0.05,
-    depth_model = c("poisson", "negbin", "fixed"),
-    depth_lambda = 5, depth_size = 5, depth_fixed = 1,
-    target_mean = 10,
+    num_spots, x1 = 0, x2 = 1, y1 = 0, y2 = 1, num_genes, prop = c(0.8, 0.2),
+    pat_type = "hotspot", high_exp_prop = 0.3, grad_percent = 0.3, G, gene_grp,
+    rho = 0.85, tau_beta = 10, eps_sd = 0.20, eta_scale = 3.0,
+    max_count = 500, zero_prop = 0.05, depth_model = c("poisson", "negbin", "fixed"),
+    depth_lambda = 5, depth_size = 5, depth_fixed = 1, target_mean = 10,
     seed = NULL, verbose = TRUE) {
 
   depth_model <- match.arg(depth_model)
