@@ -7,29 +7,40 @@
 fit_sphere(
   data_mat,
   spot,
-  gene_group,
-  iter_sampling = 2000,
-  iter_warmup = 1000,
+  gene_group = NULL,
+  pathway_membership = NULL,
   N_i = NULL,
   inits = NULL,
   stan_model_path = system.file("stan", "SPHERE_stan.stan", package = "SPHERE"),
+  use_pathway = TRUE,
+  fix_rho_zero = FALSE,
+  car_type = c("leroux", "sparse"),
+  use_shared_Phi = TRUE,
+  iter_sampling = 2000,
+  iter_warmup = 1000,
   chains = 3,
   seed = 8,
   knots = 30,
-  alpha = c(10, 3),
   refresh = 100,
+  keep_fit = FALSE,
+  save_draws = c("rho_u", "sigma_u", "alpha0", "mu0", "sigma_beta", "prob_SE",
+    "sig_eta_gs"),
   mu_noise = 0,
-  sd_noise = 1,
-  mu_gp_lengthscale = 0,
-  sd_gp_lengthscale = 3,
+  sd_noise = 0.5,
   mu_gp_amplitude = 0,
-  sd_gp_amplitude = 12,
-  mu_intercept = 0,
+  sd_gp_amplitude = 0.4,
+  mu_gp_lengthscale = NULL,
+  sd_gp_lengthscale = 0.4,
+  mu_intercept = NULL,
   sd_intercept = 1,
-  shape_beta_rho = 5,
-  rate_beta_rho = 2,
-  mu_beta_sig = 1,
-  sd_beta_sig = 1
+  mu_beta_sig = 0,
+  sd_beta_sig = 0.5,
+  alpha0_mean = qlogis(0.2),
+  alpha0_sd = 1,
+  mu_u_sig = 0,
+  sd_u_sig = 1.5,
+  shape_rho_u = 1,
+  rate_rho_u = 1
 )
 }
 \arguments{
@@ -37,17 +48,16 @@ fit_sphere(
 counts, where \eqn{n} is the number of spatial spots and \eqn{p} is the
 number of genes. Non-integer values are rounded.}
 
-\item{spot}{A numeric matrix (\eqn{n \times d}) of spatial coordinates for
-each spot (typically \eqn{d = 2} for x-y coordinates).}
+\item{spot}{A numeric matrix or data frame (\eqn{n \times 2}) of spatial
+coordinates for each spot.}
 
-\item{gene_group}{A character or factor vector of length \eqn{p} giving the
-pathway (group) membership for each gene.}
+\item{gene_group}{A vector of length \eqn{p} giving a single pathway label
+for each gene. Supply this or \code{pathway_membership}, not both
+(default: NULL).}
 
-\item{iter_sampling}{Integer. Number of post-warmup sampling iterations per
-chain (default: 2000).}
-
-\item{iter_warmup}{Integer. Number of warmup (burn-in) iterations per chain
-(default: 1000).}
+\item{pathway_membership}{A binary matrix (\eqn{p \times K}) of gene-pathway
+membership, allowing genes to belong to several pathways. Supply this or
+\code{gene_group}, not both (default: NULL).}
 
 \item{N_i}{A numeric vector of length \eqn{n} giving the library size
 (sequencing depth) for each spot. If NULL, defaults to the row sums
@@ -57,69 +67,118 @@ of \code{data_mat} (default: NULL).}
 MCMC sampler, or NULL to use the default data-driven initialization
 (default: NULL).}
 
-\item{stan_model_path}{Character string. Path to the compiled Stan model
-file (\code{.stan}). Defaults to the model bundled with the package.}
+\item{stan_model_path}{Character string. Path to the Stan model file
+(\code{.stan}). Defaults to the model bundled with the package.}
+
+\item{use_pathway}{Logical. If TRUE, the pathway network informs SE
+detection; if FALSE, every gene shares the same prior SE log-odds
+(default: TRUE).}
+
+\item{fix_rho_zero}{Logical. If TRUE, the CAR dependence \eqn{\rho_u} is
+fixed at 0; if FALSE, it is estimated (default: FALSE).}
+
+\item{car_type}{Character. Pathway CAR prior: \code{"leroux"} (Leroux CAR)
+or \code{"sparse"} (sparse proper CAR) (default: \code{"leroux"}).}
+
+\item{use_shared_Phi}{Logical. If TRUE, one RBF basis is shared by all genes
+and the GP basis weights are integrated out analytically; if FALSE, each
+gene has its own lengthscale and the basis weights are sampled
+(default: TRUE).}
+
+\item{iter_sampling}{Integer. Number of post-warmup sampling iterations per
+chain (default: 2000).}
+
+\item{iter_warmup}{Integer. Number of warmup (burn-in) iterations per chain
+(default: 1000).}
 
 \item{chains}{Integer. Number of MCMC chains (default: 3).}
 
-\item{seed}{Integer. Random seed for reproducibility (default: 8).}
+\item{seed}{Integer. Random seed for knot selection and sampling
+(default: 8).}
 
 \item{knots}{Integer. Number of knots (inducing points) for the low-rank GP
 approximation (default: 30).}
 
-\item{alpha}{Numeric vector of length 2. Dirichlet concentration parameters
-for the mixture weights (default: \code{c(10, 3)}). The first element
-corresponds to the non-spatially-variable component.}
-
 \item{refresh}{Integer. Print progress every \code{refresh} iterations
 (default: 100). Set to 0 to suppress output.}
 
-\item{mu_noise}{Numeric. Mean of the half-normal prior on observation noise
-standard deviation (default: 0).}
+\item{keep_fit}{Logical. If TRUE, the full \code{CmdStanMCMC} object is
+returned in \code{fit}. Keep FALSE for large numbers of genes, since the
+fit caches every variable that is loaded from it (default: FALSE).}
 
-\item{sd_noise}{Numeric. Scale of the half-normal prior on observation noise
-standard deviation (default: 1).}
+\item{save_draws}{Character vector. Variables whose posterior draws are
+returned in \code{draws}. Variables not present in the fitted model (e.g.
+\code{rho_u} when \code{fix_rho_zero = TRUE}) are skipped
+(default: \code{c("rho_u", "sigma_u", "alpha0", "mu0", "sigma_beta",
+"prob_SE", "sig_eta_gs")}).}
 
-\item{mu_gp_lengthscale}{Numeric. Mean of the log-normal prior on the GP
-lengthscale (default: 0).}
+\item{mu_noise}{Numeric. Location of the half-normal prior on the
+gene-specific residual SD (default: 0).}
 
-\item{sd_gp_lengthscale}{Numeric. Scale of the log-normal prior on the GP
-lengthscale (default: 3).}
+\item{sd_noise}{Numeric. Scale of the half-normal prior on the
+gene-specific residual SD (default: 0.5).}
 
-\item{mu_gp_amplitude}{Numeric. Mean of the half-normal prior on the GP
-signal amplitude (default: 0).}
+\item{mu_gp_amplitude}{Numeric. Location of the half-normal prior on the GP
+amplitude (default: 0).}
 
 \item{sd_gp_amplitude}{Numeric. Scale of the half-normal prior on the GP
-signal amplitude (default: 12).}
+amplitude (default: 0.4).}
 
-\item{mu_intercept}{Numeric. Mean of the normal prior on the global
-log-expression intercept mu0 (default: 0).}
+\item{mu_gp_lengthscale}{Numeric or NULL. Log-scale mean of the log-normal
+prior on the GP lengthscale. If NULL, \code{log(0.25 * domain_scale)},
+where \code{domain_scale} is the square root of the area spanned by
+\code{spot} (default: NULL).}
 
-\item{sd_intercept}{Numeric. Scale of the normal prior on the global
-log-expression intercept mu0 (default: 1).}
+\item{sd_gp_lengthscale}{Numeric. Log-scale SD of the log-normal prior on
+the GP lengthscale (default: 0.4).}
 
-\item{shape_beta_rho}{Numeric. First shape parameter of the Beta prior on
-the CAR spatial correlation (default: 5).}
+\item{mu_intercept}{Numeric or NULL. Mean of the normal prior on the global
+intercept \eqn{\mu_0}. If NULL, the median log rate of the data
+(default: NULL).}
 
-\item{rate_beta_rho}{Numeric. Second shape parameter of the Beta prior on
-the CAR spatial correlation (default: 2).}
+\item{sd_intercept}{Numeric. SD of the normal prior on \eqn{\mu_0}
+(default: 1).}
 
-\item{mu_beta_sig}{Numeric. Mean of the half-normal prior on the CAR
-precision parameter (default: 1).}
+\item{mu_beta_sig}{Numeric. Location of the half-normal prior on the SD of
+the gene-level effects \eqn{\beta_j} (default: 0).}
 
-\item{sd_beta_sig}{Numeric. Scale of the half-normal prior on the CAR
-precision parameter (default: 1).}
+\item{sd_beta_sig}{Numeric. Scale of the half-normal prior on the SD of the
+gene-level effects \eqn{\beta_j} (default: 0.5).}
+
+\item{alpha0_mean}{Numeric. Mean of the normal prior on the global SE
+log-odds \eqn{\alpha_0} (default: \code{qlogis(0.2)}).}
+
+\item{alpha0_sd}{Numeric. SD of the normal prior on \eqn{\alpha_0}
+(default: 1).}
+
+\item{mu_u_sig}{Numeric. Location of the half-normal prior on the SD of the
+pathway effects \eqn{u_j} (default: 0).}
+
+\item{sd_u_sig}{Numeric. Scale of the half-normal prior on the SD of the
+pathway effects \eqn{u_j} (default: 1.5).}
+
+\item{shape_rho_u}{Numeric. First shape parameter of the Beta prior on the
+CAR dependence \eqn{\rho_u} (default: 1).}
+
+\item{rate_rho_u}{Numeric. Second shape parameter of the Beta prior on the
+CAR dependence \eqn{\rho_u} (default: 1).}
 }
 \value{
-A named list with the following elements:
+A named list of class \code{"sphere_fit"} with the following
+elements:
 \describe{
 \item{fit}{The \code{CmdStanMCMC} object containing the
-full posterior samples.}
+full posterior samples, or NULL when \code{keep_fit = FALSE}.}
 \item{summary}{A data frame of posterior summary statistics for key
 parameters (mean, median, sd, 95\\% credible intervals, convergence
-diagnostics).}
+diagnostics), with gene names on gene-level rows.}
+\item{prob_SE}{Named numeric vector of posterior mean probabilities that
+each gene is spatially expressed.}
 \item{draws}{A \code{draws_array} object from the \pkg{posterior} package
-containing all posterior draws.}
+containing the posterior draws of the variables in \code{save_draws}
+that exist in the fitted model.}
+\item{sampler_diag}{Sampler diagnostics (divergences, maximum treedepth
+hits, E-BFMI) from \code{fit$diagnostic_summary()}.}
 \item{stan_data}{The list of data passed to Stan (useful for
 reproducibility and diagnostics).}
 \item{runtime}{Numeric. Total elapsed wall-clock time in seconds.}
@@ -128,9 +187,10 @@ reproducibility and diagnostics).}
 \description{
 Fits the SPHERE (Spatial Poisson Hierarchical modEl with pathway-infoRmed
 gEne networks) model using a Bayesian framework implemented in Stan. The
-model identifies spatially expressed (SE) genes  by combining a Poisson
-log-normal likelihood, low-rank Gaussian Process spatial effects, and
-pathway-informed Conditional Autoregressive (CAR) priors.
+model identifies spatially expressed (SE) genes by combining a Poisson
+log-normal likelihood, a low-rank Gaussian Process spatial effect, and a
+pathway-informed Conditional Autoregressive (CAR) prior on each gene's SE
+log-odds.
 }
 \details{
 The SPHERE model has three main components:
@@ -141,14 +201,27 @@ size.
 \item \strong{Spatial structure:} A low-rank Radial Basis Function (RBF)
 Gaussian Process captures spatial expression patterns using \code{knots}
 inducing points.
-\item \strong{Gene classification:} A two-component mixture model with a
-gene-level indicator \eqn{Z_j} classifies each gene as spatially
-expressed (SE) or non-spatially expressed (non-SE). Pathway information
-is incorporated via a CAR prior on gene-level effects \eqn{\beta_j}.
+\item \strong{Gene classification:} A gene-level indicator \eqn{Z_j}
+classifies each gene as SE or non-SE. Its prior probability is
+\eqn{\mathrm{logit}^{-1}(\alpha_0 + u_j)}, where the pathway effects
+\eqn{u_j} follow a CAR prior on the pathway network: genes that share a
+pathway are neighbours.
 }
 
-The posterior probability of spatial variability for gene \eqn{j} is
-estimated as the fraction of posterior samples where \eqn{Z_j = 2}.
+The posterior probability that gene \eqn{j} is SE is returned in
+\code{prob_SE}. The same call fits real data and data simulated with either
+\code{\link{generate_genedata_model}} (model-based) or
+\code{\link{make_pattern_design}} (pattern-based); the input data alone
+determine what is fitted.
+
+Model variants used in the paper:
+\itemize{
+\item \code{use_pathway = TRUE, fix_rho_zero = FALSE}: pathway-informed
+model (M1).
+\item \code{use_pathway = TRUE, fix_rho_zero = TRUE}: \eqn{\rho_u = 0}
+(M2).
+\item \code{use_pathway = FALSE}: no pathway information (M3).
+}
 
 If \code{N_i} is provided, it overrides the default row-sum normalization.
 This is useful when library sizes have been pre-computed or adjusted
@@ -160,39 +233,43 @@ data-driven initialization is used automatically.
 }
 \examples{
 \dontrun{
+# Model-based simulated data
+M   <- generate_pathway_membership(num_genes = 50, num_pathways = 10, seed = 1)
+sim <- generate_genedata_model(num_spots = 100, num_genes = 50,
+                               pathway_membership = M, seed = 2)
 result <- fit_sphere(
-  data_mat   = counts_matrix,
-  spot       = coord_matrix,
-  gene_group = pathway_labels,
-  chains     = 3,
-  iter_sampling = 2000,
-  iter_warmup   = 1000
+  data_mat           = sim$Y,
+  spot               = sim$spots,
+  pathway_membership = sim$pathway_membership,
+  N_i                = sim$N_i
 )
 
-# Using custom library sizes
+# Pattern-based simulated data: same call
+design <- make_pattern_design(num_spots = 100, num_genes = 50,
+                              pathway_membership = M, design_seed = 3)
+pat    <- simulate_counts(design, seed = 4)
 result <- fit_sphere(
-  data_mat   = counts_matrix,
-  spot       = coord_matrix,
-  gene_group = pathway_labels,
-  N_i        = my_library_sizes
+  data_mat           = pat$Y,
+  spot               = pat$spots,
+  pathway_membership = pat$pathway_membership,
+  N_i                = pat$N_i
 )
 
-# Using custom initial values
-my_inits <- function() {
-  list(mu0 = 0, sigma_beta = 0.5, rho = 0.8)
-}
+# Real data with one pathway label per gene, sparse CAR
 result <- fit_sphere(
   data_mat   = counts_matrix,
   spot       = coord_matrix,
   gene_group = pathway_labels,
-  inits      = my_inits
+  car_type   = "sparse"
 )
 
 # Posterior probability of each gene being spatially expressed
-z_summary <- result$summary[grep("^Z\\\\[", result$summary$variable), ]
+result$prob_SE
 }
 
 }
 \seealso{
-\code{make_rbf_basis}, \code{make_rbf_dist}
+\code{\link{generate_genedata_model}},
+\code{\link{make_sim_design}}, \code{\link{make_pattern_design}},
+\code{\link{simulate_counts}}
 }

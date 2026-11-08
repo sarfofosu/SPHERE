@@ -6,31 +6,89 @@
 \usage{
 generate_genedata_model(
   num_spots,
+  num_genes,
+  gene_grp = NULL,
+  pathway_membership = NULL,
+  base_se_prob = 0.2,
+  rho_u = 0.8,
+  sigma_u = 1,
+  sigma_beta = 0.3,
+  eps_sd = 0.25,
+  signal_scenario = "mixed",
+  weak_range = c(0.1, 0.25),
+  moderate_range = c(0.25, 0.45),
+  strong_range = c(0.45, 0.7),
+  custom_range = c(0.4, 0.7),
+  ell_range = c(0.15, 0.35),
+  signal_probs = c(weak = 0.4, moderate = 0.3, strong = 0.3),
+  depth_median = 5000,
+  depth_log_sd = 0.35,
+  baseline_mean = 5,
   x1 = 0,
   x2 = 1,
   y1 = 0,
   y2 = 1,
-  num_genes,
-  prop = c(0.8, 0.2),
-  G,
-  gene_grp,
-  rho = 0.85,
-  tau_beta = 10,
-  tau_gs = NULL,
-  ell_gs = NULL,
-  nugget = 1e-06,
-  eps_sd = 0.2,
-  depth_model = c("poisson", "negbin", "fixed"),
-  depth_lambda = 5,
-  depth_size = 5,
-  depth_fixed = 1,
-  target_mean = 10,
+  nugget = 1e-08,
+  car_type = c("leroux", "proper"),
+  standardize_u = TRUE,
   seed = NULL,
   verbose = TRUE
 )
 }
 \arguments{
-\item{num_spots}{Integer. Number of spatial spots to generate.}
+\item{num_spots}{Integer. Number of spatial spots.}
+
+\item{num_genes}{Integer. Number of genes.}
+
+\item{gene_grp}{Integer vector or NULL. Single pathway label per gene.
+Supply this or \code{pathway_membership}, not both (default: NULL).}
+
+\item{pathway_membership}{Binary matrix or NULL. Gene-by-pathway
+membership, e.g. from \code{\link{generate_pathway_membership}}
+(default: NULL).}
+
+\item{base_se_prob}{Numeric in \eqn{(0, 1)}. Target average SE probability
+(default: 0.2).}
+
+\item{rho_u}{Numeric in \eqn{[0, 1)}. CAR dependence of the pathway
+effects (default: 0.8).}
+
+\item{sigma_u}{Numeric. Scale of the pathway effects (default: 1).}
+
+\item{sigma_beta}{Numeric. SD of the gene-level effects \eqn{\beta_j}
+(default: 0.3).}
+
+\item{eps_sd}{Numeric. SD of the iid log-scale noise (default: 0.25).}
+
+\item{signal_scenario}{Character. One of \code{"weak"},
+\code{"moderate"}, \code{"strong"}, \code{"mixed"} or \code{"custom"}
+(default: \code{"mixed"}).}
+
+\item{weak_range}{Numeric vector of length 2. GP amplitude range for weak
+signals (default: \code{c(0.10, 0.25)}).}
+
+\item{moderate_range}{Numeric vector of length 2. GP amplitude range for
+moderate signals (default: \code{c(0.25, 0.45)}).}
+
+\item{strong_range}{Numeric vector of length 2. GP amplitude range for
+strong signals (default: \code{c(0.45, 0.70)}).}
+
+\item{custom_range}{Numeric vector of length 2. GP amplitude range for
+\code{"custom"} (default: \code{c(0.4, 0.7)}).}
+
+\item{ell_range}{Numeric vector of length 2. GP lengthscale range on the
+unit square; rescaled by the domain size (default: \code{c(0.15, 0.35)}).}
+
+\item{signal_probs}{Named numeric vector (weak, moderate, strong) summing
+to 1. Class probabilities for \code{"mixed"}
+(default: \code{c(weak = 0.4, moderate = 0.3, strong = 0.3)}).}
+
+\item{depth_median}{Numeric. Median library size (default: 5000).}
+
+\item{depth_log_sd}{Numeric. SD of log library size (default: 0.35).}
+
+\item{baseline_mean}{Numeric. Baseline expected count; sets
+\code{mu0 = log(baseline_mean / depth_median)} (default: 5).}
 
 \item{x1}{Numeric. Minimum x-coordinate (default: 0).}
 
@@ -40,88 +98,35 @@ generate_genedata_model(
 
 \item{y2}{Numeric. Maximum y-coordinate (default: 1).}
 
-\item{num_genes}{Integer. Total number of genes to simulate.}
+\item{nugget}{Numeric. Nugget added to the GP covariance diagonal
+(default: 1e-8).}
 
-\item{prop}{Numeric vector of length 2 summing to 1. Proportions of
-non-SE and SE genes respectively (default: \code{c(0.8, 0.2)}).}
+\item{car_type}{Character. \code{"leroux"} (default) or \code{"proper"}.}
 
-\item{G}{Integer. Number of biological pathway groups.}
+\item{standardize_u}{Logical. Standardize the pathway effects so their
+average marginal SD equals \code{sigma_u} (default: TRUE).}
 
-\item{gene_grp}{Integer vector of length \code{num_genes} giving
-pathway membership for each gene.}
+\item{seed}{Integer or NULL. Random seed for reproducibility (default: NULL).}
 
-\item{rho}{Numeric. CAR spatial correlation for pathway effects
-(default: 0.85).}
-
-\item{tau_beta}{Numeric. CAR precision for pathway effects
-(default: 10).}
-
-\item{tau_gs}{Numeric vector or NULL. GP amplitude for each SE gene.
-If NULL, sampled from \code{Uniform(0.05, 0.30)}.}
-
-\item{ell_gs}{Numeric vector or NULL. GP lengthscale for each SE gene.
-If NULL, sampled from \code{Uniform(0.50, 2.00)}.}
-
-\item{nugget}{Numeric. Nugget added to GP covariance diagonal for
-numerical stability (default: 1e-6).}
-
-\item{eps_sd}{Numeric. Standard deviation of iid log-scale noise
-(default: 0.20).}
-
-\item{depth_model}{Character. Model for sequencing depth. One of
-\describe{
-\item{\code{"poisson"}}{Poisson-distributed sequencing depth}
-\item{\code{"negbin"}}{Negative binomial sequencing depth}
-\item{\code{"fixed"}}{Constant sequencing depth}
-} (default: \code{"poisson"}).}
-
-\item{depth_lambda}{Numeric. Mean for Poisson or NegBin depth
-(default: 5).}
-
-\item{depth_size}{Numeric. Overdispersion for NegBin depth —
-smaller values give more overdispersion (default: 5).}
-
-\item{depth_fixed}{Numeric. Fixed library size when
-\code{depth_model = "fixed"} (default: 1).}
-
-\item{target_mean}{Numeric. Desired median count for auto-calibrating
-the global intercept \code{mu0} (default: 10).}
-
-\item{seed}{Integer or NULL. Random seed for reproducibility
-(default: NULL).}
-
-\item{verbose}{Logical. If TRUE, prints a simulation summary
-(default: TRUE).}
+\item{verbose}{Logical. If TRUE, prints a simulation summary (default: TRUE).}
 }
 \value{
-A named list with elements:
-\describe{
-\item{Y}{Integer matrix (\eqn{n \times p}) of simulated counts.}
-\item{spots}{Data frame of spatial coordinates.}
-\item{N_i}{Integer vector of per-spot library sizes.}
-\item{mu0}{Numeric. Auto-calibrated global log-expression intercept.}
-\item{Beta}{Numeric vector of CAR pathway effects.}
-\item{epsilon}{Numeric matrix of iid log-scale noise.}
-\item{eta}{Numeric matrix of GP spatial effects (n x p).}
-\item{G}{Integer. Number of pathway groups.}
-\item{Z}{Integer vector of true gene classifications (1=non-SE, 2=SE).}
-\item{se_idx}{Integer vector of SE gene indices.}
-\item{gene_grp}{Integer vector of pathway group memberships.}
-\item{tau_gs}{Numeric vector of GP amplitudes for SE genes.}
-\item{ell_gs}{Numeric vector of GP lengthscales for SE genes.}
-\item{lambda}{Numeric matrix of latent Poisson rates.}
-\item{Y_mean}{Numeric matrix of expected counts.}
-\item{param}{Named list of all simulation parameters used, including
-\code{pattern}, \code{n}, \code{p}, \code{prop}, \code{seed},
-\code{rho}, \code{tau_beta}, \code{eps_sd}, \code{nugget},
-\code{depth_model}, \code{depth_lambda}, \code{depth_size},
-\code{depth_fixed}, and \code{target_mean}. Useful for
-reproducibility and diagnostics.}
-}
+A named list including \code{Y} (count matrix), \code{spots},
+\code{N_i}, \code{mu0}, \code{Beta}, \code{epsilon}, \code{eta},
+\code{loglambda}, \code{lambda}, \code{Y_mean}, \code{Z} (1 = SE),
+\code{se_idx}, \code{nonse_idx}, \code{alpha0}, \code{u},
+\code{u_centered}, \code{pi}, the pathway network (\code{W}, \code{D},
+\code{Q0}, \code{Sigma_u}, \code{degree}, \code{pathway_membership},
+\code{shared_pathways}), \code{sigma_eta}, \code{ell},
+\code{signal_class}, diagnostics (\code{nbr_corr}, \code{sd_logit_pi})
+and \code{param}, a list of all simulation settings.
 }
 \description{
-Simulates spatial transcriptomics count data consistent with the
-SPHERE model. Includes library size variation, CAR pathway effects,
-gene-specific Gaussian Process spatial effects, and auto-calibrated
-baseline expression.
+Simulates one spatial transcriptomics dataset consistent with the SPHERE
+model. SE status is pathway-informed: pathway network -> pathway effect
+\eqn{u} (CAR) -> \eqn{\pi_j} -> \eqn{Z_j \sim \mathrm{Bernoulli}(\pi_j)}. SE
+genes receive a GP spatial pattern of random strength; non-SE genes get
+none. Counts follow
+\eqn{Y_{ij} \sim \mathrm{Poisson}(N_i \lambda_{ij})} with
+\eqn{\log \lambda_{ij} = \mu_0 + \beta_j + \varepsilon_{ij} + \eta_{ij}}.
 }
