@@ -1,6 +1,6 @@
 Package: SPHERE
 Title: Spatial Poisson Hierarchical modEl with pathway-infoRmed GEne Networks
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: c(
     person("Emmanuel", "Sarfo Fosu", 
            email = "emmanuelsarfo45@yahoo.com", 
